@@ -24,6 +24,16 @@ fn den(x: f64) -> f64 {
     else { x }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct BiquadPs {
+    k: f64,
+    q: f64,
+    vb: f64,
+    vl: f64,
+    vh: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
 struct Biquad {
     sample_rate: f64,
     a1: f64,
@@ -62,16 +72,39 @@ impl Biquad {
             vh,
         }
     }
+
+    fn requantize(&self, new_sample_rate: f64) -> Biquad {
+        if new_sample_rate == self.sample_rate {
+            // No work needed, return a copy of the original biquad.
+            return *self
+        }
+
+        let ps = self.get_ps();
+
+        let k       = ((self.sample_rate / new_sample_rate) * ps.k.atan()).tan();
+        let k_sq    = k * k;
+        let k_by_q  = k / ps.q;
+        let a0      = 1.0 + k_by_q + k_sq;
+
+        let sample_rate = new_sample_rate;
+        let a1 = den((2.0 * (k_sq - 1.0)) / a0);
+        let a2 = den((1.0 - k_by_q + k_sq) / a0);
+        let b0 = den((ps.vh + ps.vb * k_by_q + ps.vl * k_sq) / a0);
+        let b1 = den((2.0 * (ps.vl * k_sq - ps.vh)) / a0);
+        let b2 = den((ps.vh - ps.vb * k_by_q + ps.vl * k_sq) / a0);
+
+        Biquad {
+            sample_rate,
+            a1,
+            a2,
+            b0,
+            b1,
+            b2,
+        }
+    }
 }
 
-struct BiquadPs {
-    k: f64,
-    q: f64,
-    vb: f64,
-    vl: f64,
-    vh: f64,
-}
-
+#[derive(Clone, Copy, Debug)]
 struct Bin {
     db: f64,
     x: f64,
@@ -79,6 +112,9 @@ struct Bin {
     count: u64,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Stats {
-
+    max_wmsq: f64,
+    pass1_wmsq: f64,
+    pass1_count: u64,
 }
