@@ -1,3 +1,7 @@
+#![feature(const_fn)]
+
+pub mod itu_r_bs1770;
+
 #[derive(Clone, Copy, Debug)]
 struct MBlockOptions {
     ms: f64,
