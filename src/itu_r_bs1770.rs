@@ -6,6 +6,11 @@ const SILENCE_GATE: f64 = 1.1724653e-7; // 10.0.powf(0.1 * (0.691 + SILENCE));
 
 const DEN_THRESHOLD: f64 = 1.0e-15;
 
+const HIST_MIN: i32 = -70;
+const HIST_MAX: i32 = 5;
+const HIST_GRAIN: i32 = 100;
+const HIST_NBINS: usize = HIST_GRAIN as usize * (HIST_MAX - HIST_MIN) as usize + 1;
+
 type Sample = [f64; MAX_CHANNELS];
 
 fn lufs(x: f64) -> f64 {
@@ -104,7 +109,7 @@ impl Biquad {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 struct Bin {
     db: f64,
     x: f64,
@@ -112,9 +117,45 @@ struct Bin {
     count: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 struct Stats {
     max_wmsq: f64,
-    pass1_wmsq: f64,
-    pass1_count: u64,
+    wmsq: f64,
+    count: u64,
+    bins: [Bin; HIST_NBINS],
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        let max_wmsq = SILENCE_GATE;
+
+        let step: f64 = 1.0 / HIST_GRAIN as f64;
+
+        let to_copy = Bin::default();
+        let mut bins: [Bin; HIST_NBINS] = [to_copy; HIST_NBINS];
+
+        for i in 0..HIST_NBINS {
+            let db = (step * i as f64) + HIST_MIN as f64;
+            let wsmq = 10.0f64.powf(0.1 * (0.691 + db));
+
+            bins[i].db = db;
+            bins[i].x = wsmq;
+            bins[i].y = 0.0;
+            bins[i].count = 0;
+
+            if i > 0 {
+                bins[i - 1].y = wsmq;
+            }
+        }
+
+        let wmsq = 0.0;
+        let count = 0;
+
+        Stats {
+            max_wmsq,
+            wmsq,
+            count,
+            bins,
+        }
+    }
 }
