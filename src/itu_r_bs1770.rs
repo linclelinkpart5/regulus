@@ -256,4 +256,60 @@ impl Stats {
 
         lufs_hist(count, sum, SILENCE)
     }
+
+    fn get_range(&self, gate: f64, lower: f64, upper: f64) -> f64 {
+        let gate = self.wmsq * 10.0f64.powf(0.1 * gate);
+
+        // Ensure lower < upper.
+        let (lower, upper) = {
+            if lower > upper { (upper, lower) }
+            else { (lower, upper) }
+        };
+
+        // Ensure lower and upper are clipped to [0.0, 1.0].
+        let lower = 0.0f64.max(lower);
+        let upper = 1.0f64.min(upper);
+
+        let mut count: u64 = 0;
+
+        for bin in self.bins.iter() {
+            if bin.count > 0 && gate < bin.x {
+                count += bin.count;
+            }
+        }
+
+        if count > 0 {
+            let lower_count: u64 = (count as f64 * lower) as u64;
+            let upper_count: u64 = (count as f64 * upper) as u64;
+            let mut prev_count: u64 = u64::max_value();
+
+            let mut min_db = 0.0f64;
+            let mut max_db = 0.0f64;
+
+            // Reuse the count variable.
+            count = 0;
+
+            for bin in self.bins.iter() {
+                if bin.x > gate {
+                    count += bin.count;
+                }
+
+                if prev_count < lower_count && lower_count <= count {
+                    min_db = bin.db;
+                }
+
+                if prev_count < upper_count && upper_count <= count {
+                    max_db = bin.db;
+                    break;
+                }
+
+                prev_count = count;
+            }
+
+            max_db - min_db
+        }
+        else {
+            0.0
+        }
+    }
 }
