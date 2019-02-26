@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 const BUF_SIZE: usize = 9;
 const MAX_CHANNELS: usize = 5;
 
@@ -117,6 +119,23 @@ struct Bin {
     count: u64,
 }
 
+impl Bin {
+    fn wmsq_cmp(&self, wmsq: f64) -> Ordering {
+        if wmsq < self.x {
+            Ordering::Less
+        }
+        else if self.y == 0.0 {
+            Ordering::Equal
+        }
+        else if self.y <= wmsq {
+            Ordering::Greater
+        }
+        else {
+            Ordering::Equal
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct Stats {
     max_wmsq: f64,
@@ -157,5 +176,84 @@ impl Default for Stats {
             count,
             bins,
         }
+    }
+}
+
+impl Stats {
+    fn merge(&self, other: &Self) -> Self {
+        let new_max_wmsq = self.max_wmsq.max(other.max_wmsq);
+        let new_count = self.count + other.count;
+
+        let (new_wmsq, new_bins) = if new_count > 0 {
+            let q1 = self.count as f64 / new_count as f64;
+            let q2 = other.count as f64 / new_count as f64;
+
+            let new_wmsq = q1 * self.wmsq + q2 * other.wmsq;
+
+            let mut new_bins = self.bins.clone();
+
+            for i in 0..HIST_NBINS {
+                new_bins[i].count += other.bins[i].count;
+            }
+
+            (new_wmsq, new_bins)
+        }
+        else {
+            (self.wmsq, self.bins)
+        };
+
+        Stats {
+            max_wmsq: new_max_wmsq,
+            wmsq: new_wmsq,
+            count: new_count,
+            bins: new_bins,
+        }
+    }
+
+    fn add_sqs(&self, wmsq: f64) -> Self {
+        let new_max_wmsq = self.max_wmsq.max(wmsq);
+
+        for (i, bin) in self.bins.iter().enumerate() {
+            if bin.wmsq_cmp(wmsq) == Ordering::Equal {
+                let mut new_bins = self.bins.clone();
+
+                let new_wmsq: f64 = self.wmsq + ((wmsq - self.wmsq) / self.count as f64);
+
+                let new_count = self.count + 1;
+
+                new_bins[i].count += 1;
+
+                return Stats {
+                    max_wmsq: new_max_wmsq,
+                    wmsq: new_wmsq,
+                    count: new_count,
+                    bins: new_bins,
+                }
+            }
+        }
+
+        let mut new_stats = self.clone();
+        new_stats.max_wmsq = new_max_wmsq;
+        new_stats
+    }
+
+    fn get_max(&self) -> f64 {
+        lufs(self.max_wmsq)
+    }
+
+    fn get_mean(&self, gate: f64) -> f64 {
+        let gate = self.wmsq * 10.0f64.powf(0.1 * gate);
+
+        let mut sum: f64 = 0.0;
+        let mut count: u64 = 0;
+
+        for bin in self.bins.iter() {
+            if bin.count > 0 && gate < bin.x {
+                sum += bin.count as f64 * bin.x;
+                count += bin.count;
+            }
+        }
+
+        lufs_hist(count, sum, SILENCE)
     }
 }
