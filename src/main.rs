@@ -1,6 +1,10 @@
 #![feature(const_fn)]
 
-pub mod itu_r_bs1770;
+pub mod bin;
+pub mod biquad;
+pub mod constants;
+pub mod stats;
+pub mod util;
 
 #[derive(Clone, Copy, Debug)]
 struct MBlockOptions {
