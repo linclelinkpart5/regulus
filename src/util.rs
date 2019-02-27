@@ -1,8 +1,6 @@
 use crate::constants::DEN_THRESHOLD;
 use crate::constants::MAX_CHANNELS;
 
-type Sample = [f64; MAX_CHANNELS];
-
 pub struct Util;
 
 impl Util {

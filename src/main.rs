@@ -2,8 +2,10 @@
 
 pub mod bin;
 pub mod biquad;
+pub mod block;
 pub mod constants;
 pub mod stats;
+pub mod types;
 pub mod util;
 
 #[derive(Clone, Copy, Debug)]
