@@ -1,5 +1,3 @@
-#![feature(const_fn)]
-
 pub mod bin;
 pub mod biquad;
 pub mod block;
@@ -7,6 +5,7 @@ pub mod constants;
 pub mod stats;
 pub mod types;
 pub mod util;
+pub mod filter;
 
 #[derive(Clone, Copy, Debug)]
 struct MBlockOptions {

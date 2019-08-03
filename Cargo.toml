@@ -5,3 +5,4 @@ authors = ["Mark LeMoine <thatsgobbles@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+strum = "0.15.0"
