@@ -1,14 +1,17 @@
 use crate::util::Util;
 
+// https://github.com/mzuther/K-Meter/blob/master/doc/specifications/ITU-R%20BS.1770-1%20(Filters).pdf
 #[derive(Clone, Copy, Debug)]
 struct BiquadPs {
-    k: f64,
-    q: f64,
-    vb: f64,
-    vl: f64,
-    vh: f64,
+    k: f64, // a.k.a. Ω, tan(pi * Fc / Fs), Fc = target sample rate, Fs = source sample rate
+    q: f64, // Q factor
+    vb: f64, // band-pass gain factor
+    vl: f64, // low-pass gain factor
+    vh: f64, // high-pass gain factor
 }
 
+// Coefficients for a biquad digital filter.
+// It is assumed that `a0` is always equal to 1.0, and thus not included.
 #[derive(Clone, Copy, Debug)]
 struct Biquad {
     sample_rate: f64,
