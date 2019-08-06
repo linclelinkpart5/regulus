@@ -115,3 +115,75 @@ impl Filter {
         Filter { sample_rate, pass_a, pass_b, }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn biquad_requantize() {
+        let expected = Biquad {
+            a1: -1.69065929318241,
+            a2: 0.73248077421585,
+            b0: 1.53512485958697,
+            b1: -2.69169618940638,
+            b2: 1.19839281085285,
+        };
+        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 48000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected.a1, produced.a1);
+        assert_abs_diff_eq!(expected.a2, produced.a2);
+        assert_abs_diff_eq!(expected.b0, produced.b0);
+        assert_abs_diff_eq!(expected.b1, produced.b1);
+        assert_abs_diff_eq!(expected.b2, produced.b2);
+
+        let expected = Biquad {
+            a1: -1.6636551132560204,
+            a2: 0.7125954280732254,
+            b0: 1.5308412300503476,
+            b1: -2.6509799951547293,
+            b2: 1.1690790799215869,
+        };
+        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 44100);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected.a1, produced.a1);
+        assert_abs_diff_eq!(expected.a2, produced.a2);
+        assert_abs_diff_eq!(expected.b0, produced.b0);
+        assert_abs_diff_eq!(expected.b1, produced.b1);
+        assert_abs_diff_eq!(expected.b2, produced.b2);
+
+        let expected = Biquad {
+            a1: -0.2933807824149224,
+            a2: 0.18687510604540813,
+            b0: 1.3216235689299791,
+            b1: -0.7262554913156887,
+            b2: 0.2981262460162027,
+        };
+        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 8000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected.a1, produced.a1);
+        assert_abs_diff_eq!(expected.a2, produced.a2);
+        assert_abs_diff_eq!(expected.b0, produced.b0);
+        assert_abs_diff_eq!(expected.b1, produced.b1);
+        assert_abs_diff_eq!(expected.b2, produced.b2);
+
+        let expected = Biquad {
+            a1: -1.9222022306074886,
+            a2: 0.925117735116826,
+            b0: 1.5722272150912788,
+            b1: -3.0472830515615508,
+            b2: 1.4779713409796091,
+        };
+        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 192000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected.a1, produced.a1);
+        assert_abs_diff_eq!(expected.a2, produced.a2);
+        assert_abs_diff_eq!(expected.b0, produced.b0);
+        assert_abs_diff_eq!(expected.b1, produced.b1);
+        assert_abs_diff_eq!(expected.b2, produced.b2);
+    }
+}
