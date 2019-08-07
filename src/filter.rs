@@ -4,7 +4,7 @@ use crate::util::Util;
 /// Coefficients for a biquad digital filter at a particular sample rate.
 /// It is assumed that the `a0` coefficient is always normalized to 1.0, and thus not included here.
 #[derive(Copy, Clone, Debug)]
-pub struct Biquad {
+struct Biquad {
     a1: f64,
     a2: f64,
     b0: f64,
@@ -24,6 +24,7 @@ struct AnalogParams {
 
 impl Biquad {
     /// Calculates the analog characteristics/parameters of this biquad filter.
+    /// This is used for requantizing biquad filters with a different sample rate.
     fn get_analog_params(&self) -> AnalogParams {
         let x11 =  self.a1 - 2.0;
         let x12 =  self.a1;
