@@ -76,6 +76,22 @@ impl Biquad {
     }
 }
 
+pub struct BiquadApplier {
+    biquad: Biquad,
+    z1: f64,
+    z2: f64,
+}
+
+impl BiquadApplier {
+    pub fn apply(&mut self, input_sample: f64) -> f64 {
+        // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
+        let output_sample = input_sample /* * self.biquad.a0 */ + self.z1;
+        self.z1 = input_sample * self.biquad.a1 + self.z2 - self.biquad.b1 * output_sample;
+        self.z2 = input_sample * self.biquad.a2 - self.biquad.b2 * output_sample;
+        output_sample
+    }
+}
+
 // The ITU-R BS.1770-4 spec provides filter coefficient constants for both passes at a sample rate of 48000 Hz.
 // Requantization is used to calculate the coefficient constants for different sample rates.
 const REFERENCE_SAMPLE_RATE: u32 = 48000;
