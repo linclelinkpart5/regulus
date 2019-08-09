@@ -17,6 +17,12 @@ struct Biquad {
     b2: f64,
 }
 
+impl Biquad {
+    pub fn new(kind: Kind, sample_rate: u32) -> Self {
+        kind.get_biquad(sample_rate)
+    }
+}
+
 #[cfg(test)]
 impl AbsDiffEq for Biquad {
     type Epsilon = f64;
@@ -40,7 +46,7 @@ enum Kind {
 }
 
 impl Kind {
-    pub fn get_biquad(&self, sample_rate: u32) -> Biquad {
+    fn get_biquad(&self, sample_rate: u32) -> Biquad {
         let g = 3.999843853973347;
 
         let (f0, q) =
