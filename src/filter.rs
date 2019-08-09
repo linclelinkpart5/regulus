@@ -1,9 +1,14 @@
 
+use std::f64::consts::PI;
+
+#[cfg(test)] use approx::AbsDiffEq;
+
 use crate::util::Util;
+use crate::constants::MAX_CHANNELS;
 
 /// Coefficients for a biquad digital filter at a particular sample rate.
 /// It is assumed that the `a0` coefficient is always normalized to 1.0, and thus not included here.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct Biquad {
     a1: f64,
     a2: f64,
@@ -12,107 +17,95 @@ struct Biquad {
     b2: f64,
 }
 
-// https://github.com/mzuther/K-Meter/blob/master/doc/specifications/ITU-R%20BS.1770-1%20(Filters).pdf
+#[cfg(test)]
+impl AbsDiffEq for Biquad {
+    type Epsilon = f64;
+
+    fn default_epsilon() -> Self::Epsilon {
+        f64::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        f64::abs_diff_eq(&self.a1, &other.a1, epsilon)
+            && f64::abs_diff_eq(&self.a2, &other.a2, epsilon)
+            && f64::abs_diff_eq(&self.b0, &other.b0, epsilon)
+            && f64::abs_diff_eq(&self.b1, &other.b1, epsilon)
+            && f64::abs_diff_eq(&self.b2, &other.b2, epsilon)
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
-struct AnalogParams {
-    k: f64, // a.k.a. Ω, equal to `tan(pi * Fc / Fs)`, where Fc = target sample rate, Fs = source sample rate
-    q: f64, // Q factor
-    vb: f64, // band-pass gain factor
-    vl: f64, // low-pass gain factor
-    vh: f64, // high-pass gain factor
+enum Kind {
+    A, B,
 }
 
-impl Biquad {
-    /// Calculates the analog characteristics/parameters of this biquad filter.
-    /// This is used for requantizing biquad filters with a different sample rate.
-    fn get_analog_params(&self) -> AnalogParams {
-        let x11 =  self.a1 - 2.0;
-        let x12 =  self.a1;
-        let x1  = -self.a1 - 2.0;
+impl Kind {
+    pub fn get_biquad(&self, sample_rate: u32) -> Biquad {
+        let g = 3.999843853973347;
 
-        let x21 =  self.a2 - 1.0;
-        let x22 =  self.a2 + 1.0;
-        let x2  = -self.a2 + 1.0;
+        let (f0, q) =
+            match self {
+                &Kind::A => (1681.974450955533, 0.7071752369554196),
+                &Kind::B => (38.13547087602444, 0.5003270373238773),
+            }
+        ;
 
-        let dx      = (x22 * x11) - (x12 * x21);
-        let k_sq    = ((x22 * x1) - (x12 * x2)) / dx;
-        let k_by_q  = ((x11 * x2) - (x21 * x1)) / dx;
-        let a0      = 1.0 + k_by_q + k_sq;
+        let k = (PI * f0 / sample_rate as f64).tan();
 
-        let k   = k_sq.sqrt();
-        let q   = k / k_by_q;
-        let vb  = 0.5 * a0 * (self.b0 - self.b2) / k_by_q;
-        let vl  = 0.25 * a0 * (self.b0 + self.b1 + self.b2) / k_sq;
-        let vh  = 0.25 * a0 * (self.b0 - self.b1 + self.b2);
+        let a0 = 1.0 + k / q + k * k;
+        let a1 = 2.0 * (k * k - 1.0) / a0;
+        let a2 = (1.0 - k / q + k * k) / a0;
 
-        AnalogParams {
-            k, q, vb, vl, vh
-        }
-    }
+        let (b0, b1, b2) =
+            match self {
+                &Kind::A => {
+                    let vh = 10.0f64.powf(g / 20.0);
+                    let vb = vh.powf(0.4996667741545416);
 
-    /// Creates a new biquad filter with a new target sample rate that keeps the same analog characteristics.
-    pub fn requantize(&self, source_sample_rate: u32, target_sample_rate: u32) -> Self {
-        if target_sample_rate == source_sample_rate {
-            // No work needed, return a copy of the original biquad.
-            return *self
-        }
+                    let b0 = (vh + vb * k / q + k * k) / a0;
+                    let b1 = 2.0 * (k * k - vh) / a0;
+                    let b2 = (vh - vb * k / q + k * k) / a0;
 
-        let ps = self.get_analog_params();
+                    (b0, b1, b2)
+                },
+                &Kind::B => (1.0, -2.0, 1.0),
+            }
+        ;
 
-        let k       = ((source_sample_rate as f64 / target_sample_rate as f64) * ps.k.atan()).tan();
-        let k_sq    = k * k;
-        let k_by_q  = k / ps.q;
-        let a0      = 1.0 + k_by_q + k_sq;
-
-        let a1 = Util::den((2.0 * (k_sq - 1.0)) / a0);
-        let a2 = Util::den((1.0 - k_by_q + k_sq) / a0);
-        let b0 = Util::den((ps.vh + ps.vb * k_by_q + ps.vl * k_sq) / a0);
-        let b1 = Util::den((2.0 * (ps.vl * k_sq - ps.vh)) / a0);
-        let b2 = Util::den((ps.vh - ps.vb * k_by_q + ps.vl * k_sq) / a0);
-
-        Biquad {
-            a1, a2, b0, b1, b2,
-        }
+        Biquad { a1, a2, b0, b1, b2, }
     }
 }
 
-pub struct BiquadApplier {
+#[derive(Copy, Clone, Debug)]
+pub struct Applicator {
     biquad: Biquad,
-    z1: f64,
-    z2: f64,
+    state1: [f64; MAX_CHANNELS],
+    state2: [f64; MAX_CHANNELS],
 }
 
-impl BiquadApplier {
-    pub fn apply(&mut self, input_sample: f64) -> f64 {
+impl Applicator {
+    fn new(kind: Kind, sample_rate: u32) -> Self {
+        Applicator {
+            biquad: kind.get_biquad(sample_rate),
+            state1: [0.0; MAX_CHANNELS],
+            state2: [0.0; MAX_CHANNELS],
+        }
+    }
+
+    pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
+        let mut output = [0.0f64; MAX_CHANNELS];
+
         // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
-        let output_sample = input_sample /* * self.biquad.a0 */ + self.z1;
-        self.z1 = input_sample * self.biquad.a1 + self.z2 - self.biquad.b1 * output_sample;
-        self.z2 = input_sample * self.biquad.a2 - self.biquad.b2 * output_sample;
-        output_sample
+        for ch in 0..MAX_CHANNELS {
+            // output[ch] = input[ch] * self.ps.a0 + self.state1[ch];
+            output[ch] = input[ch] + self.state1[ch];
+            self.state1[ch] = input[ch] * self.biquad.a1 + self.state2[ch] - self.biquad.b1 * output[ch];
+            self.state2[ch] = input[ch] * self.biquad.a2 - self.biquad.b2 * output[ch];
+        }
+
+        output
     }
 }
-
-// The ITU-R BS.1770-4 spec provides filter coefficient constants for both passes at a sample rate of 48000 Hz.
-// Requantization is used to calculate the coefficient constants for different sample rates.
-const REFERENCE_SAMPLE_RATE: u32 = 48000;
-const REFERENCE_PASS_A: Biquad =
-    Biquad {
-        a1: -1.69065929318241,
-        a2:  0.73248077421585,
-        b0:  1.53512485958697,
-        b1: -2.69169618940638,
-        b2:  1.19839281085285,
-    }
-;
-const REFERENCE_PASS_B: Biquad =
-    Biquad {
-        a1: -1.99004745483398,
-        a2:  0.99007225036621,
-        b0:  1.00000000000000,
-        b1: -2.00000000000000,
-        b2:  1.00000000000000,
-    }
-;
 
 /// The initial two-pass "K"-filter as described by the ITU-R BS.1770-4 spec.
 /// The first pass is a shelving filter, which accounts for the acoustic effects of the listener's (spherical) head.
@@ -120,16 +113,20 @@ const REFERENCE_PASS_B: Biquad =
 #[derive(Copy, Clone, Debug)]
 pub struct Filter {
     sample_rate: u32,
-    pass_a: Biquad,
-    pass_b: Biquad,
+    pass_a: Applicator,
+    pass_b: Applicator,
 }
 
 impl Filter {
     pub fn new(sample_rate: u32) -> Self {
-        let pass_a = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, sample_rate);
-        let pass_b = REFERENCE_PASS_B.requantize(REFERENCE_SAMPLE_RATE, sample_rate);
+        let pass_a = Applicator::new(Kind::A, sample_rate);
+        let pass_b = Applicator::new(Kind::B, sample_rate);
 
         Filter { sample_rate, pass_a, pass_b, }
+    }
+
+    pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
+        self.pass_b.apply(&self.pass_a.apply(input))
     }
 }
 
@@ -138,54 +135,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn biquad_requantize() {
+    fn kind_get_biquad() {
         let expected = Biquad {
-            a1: -1.69065929318241,
-            a2: 0.73248077421585,
-            b0: 1.53512485958697,
-            b1: -2.69169618940638,
+            a1: -1.6906592931824103,
+            a2: 0.7324807742158501,
+            b0: 1.5351248595869702,
+            b1: -2.6916961894063807,
             b2: 1.19839281085285,
         };
-        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 48000);
+        let produced = Kind::A.get_biquad(48000);
 
         println!("{:?}, {:?}", expected, produced);
-        assert_abs_diff_eq!(expected.a1, produced.a1);
-        assert_abs_diff_eq!(expected.a2, produced.a2);
-        assert_abs_diff_eq!(expected.b0, produced.b0);
-        assert_abs_diff_eq!(expected.b1, produced.b1);
-        assert_abs_diff_eq!(expected.b2, produced.b2);
+        assert_abs_diff_eq!(expected, produced);
 
         let expected = Biquad {
             a1: -1.6636551132560204,
             a2: 0.7125954280732254,
-            b0: 1.5308412300503476,
-            b1: -2.6509799951547293,
-            b2: 1.1690790799215869,
+            b0: 1.5308412300503478,
+            b1: -2.6509799951547297,
+            b2: 1.169079079921587,
         };
-        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 44100);
+        let produced = Kind::A.get_biquad(44100);
 
         println!("{:?}, {:?}", expected, produced);
-        assert_abs_diff_eq!(expected.a1, produced.a1);
-        assert_abs_diff_eq!(expected.a2, produced.a2);
-        assert_abs_diff_eq!(expected.b0, produced.b0);
-        assert_abs_diff_eq!(expected.b1, produced.b1);
-        assert_abs_diff_eq!(expected.b2, produced.b2);
+        assert_abs_diff_eq!(expected, produced);
 
         let expected = Biquad {
-            a1: -0.2933807824149224,
-            a2: 0.18687510604540813,
-            b0: 1.3216235689299791,
-            b1: -0.7262554913156887,
-            b2: 0.2981262460162027,
+            a1: -0.2933807824149212,
+            a2: 0.18687510604540827,
+            b0: 1.3216235689299776,
+            b1: -0.7262554913156911,
+            b2: 0.2981262460162007,
         };
-        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 8000);
+        let produced = Kind::A.get_biquad(8000);
 
         println!("{:?}, {:?}", expected, produced);
-        assert_abs_diff_eq!(expected.a1, produced.a1);
-        assert_abs_diff_eq!(expected.a2, produced.a2);
-        assert_abs_diff_eq!(expected.b0, produced.b0);
-        assert_abs_diff_eq!(expected.b1, produced.b1);
-        assert_abs_diff_eq!(expected.b2, produced.b2);
+        assert_abs_diff_eq!(expected, produced);
 
         let expected = Biquad {
             a1: -1.9222022306074886,
@@ -194,13 +179,9 @@ mod tests {
             b1: -3.0472830515615508,
             b2: 1.4779713409796091,
         };
-        let produced = REFERENCE_PASS_A.requantize(REFERENCE_SAMPLE_RATE, 192000);
+        let produced = Kind::A.get_biquad(192000);
 
         println!("{:?}, {:?}", expected, produced);
-        assert_abs_diff_eq!(expected.a1, produced.a1);
-        assert_abs_diff_eq!(expected.a2, produced.a2);
-        assert_abs_diff_eq!(expected.b0, produced.b0);
-        assert_abs_diff_eq!(expected.b1, produced.b1);
-        assert_abs_diff_eq!(expected.b2, produced.b2);
+        assert_abs_diff_eq!(expected, produced);
     }
 }
