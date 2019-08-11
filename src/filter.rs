@@ -3,7 +3,6 @@ use std::f64::consts::PI;
 
 #[cfg(test)] use approx::AbsDiffEq;
 
-use crate::util::Util;
 use crate::constants::MAX_CHANNELS;
 
 /// Coefficients for a biquad digital filter at a particular sample rate.
@@ -19,7 +18,38 @@ struct Biquad {
 
 impl Biquad {
     pub fn new(kind: Kind, sample_rate: u32) -> Self {
-        kind.get_biquad(sample_rate)
+        let g = 3.999843853973347;
+
+        let (f0, q) =
+            match kind {
+                Kind::A => (1681.974450955533, 0.7071752369554196),
+                Kind::B => (38.13547087602444, 0.5003270373238773),
+            }
+        ;
+
+        let k = (PI * f0 / sample_rate as f64).tan();
+
+        let a0 = 1.0 + k / q + k * k;
+        let a1 = 2.0 * (k * k - 1.0) / a0;
+        let a2 = (1.0 - k / q + k * k) / a0;
+
+        let (b0, b1, b2) =
+            match kind {
+                Kind::A => {
+                    let vh = 10.0f64.powf(g / 20.0);
+                    let vb = vh.powf(0.4996667741545416);
+
+                    let b0 = (vh + vb * k / q + k * k) / a0;
+                    let b1 = 2.0 * (k * k - vh) / a0;
+                    let b2 = (vh - vb * k / q + k * k) / a0;
+
+                    (b0, b1, b2)
+                },
+                Kind::B => (1.0, -2.0, 1.0),
+            }
+        ;
+
+        Self { a1, a2, b0, b1, b2, }
     }
 }
 
@@ -45,43 +75,6 @@ enum Kind {
     A, B,
 }
 
-impl Kind {
-    fn get_biquad(&self, sample_rate: u32) -> Biquad {
-        let g = 3.999843853973347;
-
-        let (f0, q) =
-            match self {
-                &Kind::A => (1681.974450955533, 0.7071752369554196),
-                &Kind::B => (38.13547087602444, 0.5003270373238773),
-            }
-        ;
-
-        let k = (PI * f0 / sample_rate as f64).tan();
-
-        let a0 = 1.0 + k / q + k * k;
-        let a1 = 2.0 * (k * k - 1.0) / a0;
-        let a2 = (1.0 - k / q + k * k) / a0;
-
-        let (b0, b1, b2) =
-            match self {
-                &Kind::A => {
-                    let vh = 10.0f64.powf(g / 20.0);
-                    let vb = vh.powf(0.4996667741545416);
-
-                    let b0 = (vh + vb * k / q + k * k) / a0;
-                    let b1 = 2.0 * (k * k - vh) / a0;
-                    let b2 = (vh - vb * k / q + k * k) / a0;
-
-                    (b0, b1, b2)
-                },
-                &Kind::B => (1.0, -2.0, 1.0),
-            }
-        ;
-
-        Biquad { a1, a2, b0, b1, b2, }
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 pub struct Applicator {
     biquad: Biquad,
@@ -92,7 +85,7 @@ pub struct Applicator {
 impl Applicator {
     fn new(kind: Kind, sample_rate: u32) -> Self {
         Applicator {
-            biquad: kind.get_biquad(sample_rate),
+            biquad: Biquad::new(kind, sample_rate),
             state1: [0.0; MAX_CHANNELS],
             state2: [0.0; MAX_CHANNELS],
         }
@@ -141,7 +134,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kind_get_biquad() {
+    fn biquad_new() {
         let expected = Biquad {
             a1: -1.6906592931824103,
             a2: 0.7324807742158501,
@@ -149,7 +142,7 @@ mod tests {
             b1: -2.6916961894063807,
             b2: 1.19839281085285,
         };
-        let produced = Kind::A.get_biquad(48000);
+        let produced = Biquad::new(Kind::A, 48000);
 
         println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
@@ -161,7 +154,7 @@ mod tests {
             b1: -2.6509799951547297,
             b2: 1.169079079921587,
         };
-        let produced = Kind::A.get_biquad(44100);
+        let produced = Biquad::new(Kind::A, 44100);
 
         println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
@@ -173,7 +166,7 @@ mod tests {
             b1: -0.7262554913156911,
             b2: 0.2981262460162007,
         };
-        let produced = Kind::A.get_biquad(8000);
+        let produced = Biquad::new(Kind::A, 8000);
 
         println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
@@ -185,9 +178,37 @@ mod tests {
             b1: -3.0472830515615508,
             b2: 1.4779713409796091,
         };
-        let produced = Kind::A.get_biquad(192000);
+        let produced = Biquad::new(Kind::A, 192000);
 
         println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
+
+        let expected = Biquad {
+            a1: -1.99004745483398,
+            a2:  0.99007225036621,
+            b0:  1.00000000000000,
+            b1: -2.00000000000000,
+            b2:  1.00000000000000,
+        };
+        let produced = Biquad::new(Kind::B, 48000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+    }
+
+    #[test]
+    fn applicator_new() {
+        let expected_biquad = Biquad {
+            a1: -1.6906592931824103,
+            a2: 0.7324807742158501,
+            b0: 1.5351248595869702,
+            b1: -2.6916961894063807,
+            b2: 1.19839281085285,
+        };
+        let produced = Applicator::new(Kind::A, 48000);
+
+        assert_abs_diff_eq!(expected_biquad, produced.biquad);
+        assert_eq!([0.0f64; MAX_CHANNELS], produced.state1);
+        assert_eq!([0.0f64; MAX_CHANNELS], produced.state2);
     }
 }
