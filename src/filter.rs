@@ -78,16 +78,16 @@ enum Kind {
 #[derive(Copy, Clone, Debug)]
 pub struct Applicator {
     biquad: Biquad,
-    state1: [f64; MAX_CHANNELS],
-    state2: [f64; MAX_CHANNELS],
+    s1: [f64; MAX_CHANNELS],
+    s2: [f64; MAX_CHANNELS],
 }
 
 impl Applicator {
     fn new(kind: Kind, sample_rate: u32) -> Self {
         Applicator {
             biquad: Biquad::new(kind, sample_rate),
-            state1: [0.0; MAX_CHANNELS],
-            state2: [0.0; MAX_CHANNELS],
+            s1: [0.0; MAX_CHANNELS],
+            s2: [0.0; MAX_CHANNELS],
         }
     }
 
@@ -96,10 +96,11 @@ impl Applicator {
 
         // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
         for ch in 0..MAX_CHANNELS {
-            // output[ch] = input[ch] * self.ps.a0 + self.state1[ch];
-            output[ch] = input[ch] + self.state1[ch];
-            self.state1[ch] = input[ch] * self.biquad.a1 + self.state2[ch] - self.biquad.b1 * output[ch];
-            self.state2[ch] = input[ch] * self.biquad.a2 - self.biquad.b2 * output[ch];
+            let out = self.s1[ch] + self.biquad.b0 * input[ch];
+            self.s1[ch] = self.s2[ch] + self.biquad.b1 * input[ch] - self.biquad.a1 * out;
+            self.s2[ch] = self.biquad.b2 * input[ch] - self.biquad.a2 * out;
+
+            output[ch] = out;
         }
 
         output
@@ -208,7 +209,35 @@ mod tests {
         let produced = Applicator::new(Kind::A, 48000);
 
         assert_abs_diff_eq!(expected_biquad, produced.biquad);
-        assert_eq!([0.0f64; MAX_CHANNELS], produced.state1);
-        assert_eq!([0.0f64; MAX_CHANNELS], produced.state2);
+        assert_eq!([0.0f64; MAX_CHANNELS], produced.s1);
+        assert_eq!([0.0f64; MAX_CHANNELS], produced.s2);
+    }
+
+    #[test]
+    fn applicator_apply() {
+        let mut applicator = Applicator::new(Kind::A, 48000);
+
+        let expected_rows = vec![
+            [-1.5351248595869702, 0.7675624297934851, 0.0, 0.7675624297934851, 1.5351248595869702],
+            [-1.4388017802366435, 0.7194008901183218, 0.0, 0.7194008901183218, 1.4388017802366435],
+            [-1.3498956361696552, 0.6749478180848276, 0.0, 0.6749478180848276, 1.3498956361696552],
+            [-1.2701404412191692, 0.6350702206095846, 0.0, 0.6350702206095846, 1.2701404412191692],
+            [-1.2004236209352888, 0.6002118104676444, 0.0, 0.6002118104676444, 1.2004236209352888],
+            [-1.1409753777762859, 0.5704876888881429, 0.0, 0.5704876888881429, 1.1409753777762859],
+            [-1.0915348835135539, 0.5457674417567769, 0.0, 0.5457674417567769, 1.0915348835135539],
+            [-1.0514925476036132, 0.5257462738018066, 0.0, 0.5257462738018066, 1.0514925476036132],
+        ];
+
+        let input = [-1.0, 0.5, 0.0, 0.5, 1.0];
+
+        for expected in expected_rows {
+            let produced = applicator.apply(&input);
+
+            println!("{:?}", expected);
+            println!("{:?}", produced);
+            for (e, p) in expected.iter().zip(&produced) {
+                assert_abs_diff_eq!(e, p);
+            }
+        }
     }
 }
