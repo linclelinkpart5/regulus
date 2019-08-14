@@ -54,3 +54,60 @@ impl MeanSquare {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mean_square() {
+        let mut mean_sq = MeanSquare::new();
+        assert_eq!(mean_sq.num_samples(), 0);
+
+        let expected = [0.0f64; MAX_CHANNELS];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+
+        mean_sq.add_samples(&[[1.0, 1.0, 1.0, 1.0, 1.0]]);
+        assert_eq!(mean_sq.num_samples(), 1);
+
+        let expected = [1.0f64; MAX_CHANNELS];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+
+        mean_sq.add_samples(&[[-1.0, -0.5, 0.0, 0.5, 1.0]]);
+        assert_eq!(mean_sq.num_samples(), 2);
+
+        let expected = [1.0, 0.625, 0.5, 0.625, 1.0];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+
+        mean_sq.add_samples(&[[0.0, 0.2, 0.4, 0.6, 0.8]]);
+        assert_eq!(mean_sq.num_samples(), 3);
+
+        let expected = [0.6666666666666666, 0.43, 0.3866666666666667, 0.5366666666666666, 0.88];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+
+        mean_sq.add_samples(&[
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+        ]);
+        assert_eq!(mean_sq.num_samples(), 6);
+
+        let expected = [0.8333333333333334, 0.715, 0.6933333333333334, 0.7683333333333332, 0.9400000000000001];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+    }
+}
