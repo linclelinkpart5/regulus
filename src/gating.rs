@@ -1,0 +1,3 @@
+const GATE_DELTA_MS: u64 = 100;
+const GATE_FACTOR: u64 = 4;
+const GATE_LENGTH_MS: u64 = GATE_DELTA_MS * GATE_FACTOR;

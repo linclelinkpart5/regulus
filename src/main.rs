@@ -9,6 +9,7 @@ pub mod types;
 pub mod util;
 pub mod filter;
 pub mod mean_sq;
+pub mod gating;
 
 #[derive(Clone, Copy, Debug)]
 struct MBlockOptions {
