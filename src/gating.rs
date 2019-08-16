@@ -16,7 +16,6 @@ where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
     sample_iter: I,
-    // sample_rate: u32,
     samples_per_delta: usize,
     samples_per_gate: usize,
     ring_buffer: SliceDeque<[f64; MAX_CHANNELS]>,
@@ -79,6 +78,8 @@ where
         msq.add_samples(self.ring_buffer.as_slice());
         let result = msq.mean_sqs();
 
+        // println!("{}, {:?}", msq.num_samples(), result);
+
         Some(result)
     }
 }
@@ -115,5 +116,41 @@ where
         let loudness = -0.691 + 10.0 * sum.log10();
 
         Some(loudness)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CYCLE_LEN: usize = 128;
+
+    #[derive(Default)]
+    struct SampleIter(usize);
+
+    impl SampleIter {
+        fn new() -> Self {
+            Default::default()
+        }
+    }
+
+    impl Iterator for SampleIter {
+        type Item = [f64; MAX_CHANNELS];
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let x = (2.0 * self.0 as f64 / CYCLE_LEN as f64) - 1.0;
+            self.0 = (self.0 + 1) % CYCLE_LEN;
+            Some([-x, -x / 2.0, 0.0, x / 2.0, x])
+        }
+    }
+
+    #[test]
+    fn gated_mean_square_iter() {
+        let mut gmsi = GatedMeanSquareIter::new(SampleIter::new(), 44100);
+
+        println!("{:?}", gmsi.next());
+        println!("{:?}", gmsi.next());
+        println!("{:?}", gmsi.next());
+        println!("{:?}", gmsi.next());
     }
 }

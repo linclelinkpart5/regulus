@@ -36,8 +36,10 @@ impl MeanSquare {
         }
 
         if n == 0 {
-            // If no samples have been stored, just save the summed samples and their count.
-            self.curr = summed_sqs;
+            // If no samples have been stored, average the summed samples and store their count.
+            for ch in 0..MAX_CHANNELS {
+                self.curr[ch] = summed_sqs[ch] / m as f64;
+            }
             self.num = m;
         } else {
             // These calculations are for a running incremental average.
@@ -48,6 +50,8 @@ impl MeanSquare {
             for ch in 0..MAX_CHANNELS {
                 next[ch] = (n as f64 * self.curr[ch] + summed_sqs[ch]) / n_p_m as f64;
             }
+
+            println!("{}, {:?}", n_p_m, next);
 
             self.curr = next;
             self.num = n_p_m;
@@ -70,28 +74,41 @@ mod tests {
             assert_abs_diff_eq!(expected[ch], produced[ch]);
         }
 
-        mean_sq.add_samples(&[[1.0, 1.0, 1.0, 1.0, 1.0]]);
-        assert_eq!(mean_sq.num_samples(), 1);
+        mean_sq.add_samples(&[
+            [0.1, 0.2, 0.3, 0.4, 0.5],
+            [0.1, 0.2, 0.3, 0.4, 0.5],
+            [0.1, 0.2, 0.3, 0.4, 0.5],
+        ]);
+        assert_eq!(mean_sq.num_samples(), 3);
 
-        let expected = [1.0f64; MAX_CHANNELS];
+        let expected = [0.01, 0.04, 0.09, 0.16, 0.25];
+        let produced = mean_sq.mean_sqs();
+        for ch in 0..expected.len().max(produced.len()) {
+            assert_abs_diff_eq!(expected[ch], produced[ch]);
+        }
+
+        mean_sq.add_samples(&[[1.0, 1.0, 1.0, 1.0, 1.0]]);
+        assert_eq!(mean_sq.num_samples(), 4);
+
+        let expected = [0.2575, 0.28, 0.3175, 0.37, 0.4375];
         let produced = mean_sq.mean_sqs();
         for ch in 0..expected.len().max(produced.len()) {
             assert_abs_diff_eq!(expected[ch], produced[ch]);
         }
 
         mean_sq.add_samples(&[[-1.0, -0.5, 0.0, 0.5, 1.0]]);
-        assert_eq!(mean_sq.num_samples(), 2);
+        assert_eq!(mean_sq.num_samples(), 5);
 
-        let expected = [1.0, 0.625, 0.5, 0.625, 1.0];
+        let expected = [0.406, 0.274, 0.254, 0.346, 0.55];
         let produced = mean_sq.mean_sqs();
         for ch in 0..expected.len().max(produced.len()) {
             assert_abs_diff_eq!(expected[ch], produced[ch]);
         }
 
         mean_sq.add_samples(&[[0.0, 0.2, 0.4, 0.6, 0.8]]);
-        assert_eq!(mean_sq.num_samples(), 3);
+        assert_eq!(mean_sq.num_samples(), 6);
 
-        let expected = [0.6666666666666666, 0.43, 0.3866666666666667, 0.5366666666666666, 0.88];
+        let expected = [0.3383333333333334, 0.235, 0.23833333333333337, 0.34833333333333333, 0.565];
         let produced = mean_sq.mean_sqs();
         for ch in 0..expected.len().max(produced.len()) {
             assert_abs_diff_eq!(expected[ch], produced[ch]);
@@ -102,9 +119,9 @@ mod tests {
             [1.0, 1.0, 1.0, 1.0, 1.0],
             [1.0, 1.0, 1.0, 1.0, 1.0],
         ]);
-        assert_eq!(mean_sq.num_samples(), 6);
+        assert_eq!(mean_sq.num_samples(), 9);
 
-        let expected = [0.8333333333333334, 0.715, 0.6933333333333334, 0.7683333333333332, 0.9400000000000001];
+        let expected = [0.5588888888888889, 0.49, 0.49222222222222217, 0.5655555555555556, 0.71];
         let produced = mean_sq.mean_sqs();
         for ch in 0..expected.len().max(produced.len()) {
             assert_abs_diff_eq!(expected[ch], produced[ch]);
