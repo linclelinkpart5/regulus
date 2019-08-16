@@ -123,6 +123,9 @@ where
 mod tests {
     use super::*;
 
+    use crate::wave::WaveKind;
+    use crate::wave::WaveGen;
+
     const CYCLE_LEN: usize = 128;
 
     #[derive(Default)]
@@ -146,11 +149,82 @@ mod tests {
 
     #[test]
     fn gated_mean_square_iter() {
-        let mut gmsi = GatedMeanSquareIter::new(SampleIter::new(), 44100);
+        const FREQUENCIES: [u32; MAX_CHANNELS] = [440, 480, 520, 560, 600];
 
-        println!("{:?}", gmsi.next());
-        println!("{:?}", gmsi.next());
-        println!("{:?}", gmsi.next());
-        println!("{:?}", gmsi.next());
+        let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES);
+        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+
+        let expected_results = [
+            [0.33333379629629456, 0.3334000000000141, 0.3333337962962951, 0.3333351851851806, 0.33343750000000755],
+            [0.33333379629629417, 0.3334000000000152, 0.33333379629629406, 0.33333518518517913, 0.33343750000000566],
+            [0.33333379629629306, 0.33340000000000763, 0.33333379629629295, 0.33333518518517596, 0.33343750000000544],
+            [0.33333379629629234, 0.33340000000000103, 0.3333337962962912, 0.33333518518517324, 0.3334375000000025],
+            [0.33333379629629073, 0.3334000000000033, 0.3333337962962899, 0.33333518518517247, 0.33343749999999983],
+            [0.3333337962962897, 0.33340000000000347, 0.3333337962962904, 0.3333351851851727, 0.33343749999999456],
+            [0.3333337962962901, 0.3334000000000038, 0.3333337962962902, 0.333335185185172, 0.3334374999999834],
+            [0.33333379629629045, 0.33340000000000836, 0.3333337962962904, 0.3333351851851737, 0.33343749999998906],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gmsi.next().unwrap();
+
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES);
+        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+
+        let expected_results = [
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gmsi.next().unwrap();
+
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES);
+        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+
+        let expected_results = [
+            [0.3333351851851775, 0.33360000000000145, 0.33333518518517663, 0.33334074074073505, 0.33375000000000676],
+            [0.33333518518517413, 0.33360000000000267, 0.33333518518517297, 0.33334074074073333, 0.33374999999999966],
+            [0.33333518518517236, 0.3336000000000016, 0.3333351851851718, 0.33334074074072767, 0.3337499999999865],
+            [0.33333518518517175, 0.33359999999999884, 0.33333518518517324, 0.3333407407407277, 0.3337499999999755],
+            [0.33333518518517335, 0.33359999999998974, 0.3333351851851759, 0.33334074074073, 0.3337499999999757],
+            [0.3333351851851765, 0.3335999999999949, 0.3333351851851782, 0.3333407407407311, 0.3337499999999655],
+            [0.33333518518517824, 0.333599999999996, 0.33333518518517896, 0.33334074074074416, 0.33374999999994337],
+            [0.33333518518517974, 0.3336000000000051, 0.3333351851851805, 0.33334074074075304, 0.33374999999997745],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gmsi.next().unwrap();
+
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        // for _ in 0..8 {
+        //     println!("{:?}", gmsi.next());
+        // }
     }
 }
