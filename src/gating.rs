@@ -111,6 +111,17 @@ where
             channel_weights,
         }
     }
+
+    fn next_unsummed(&mut self) -> Option<[f64; MAX_CHANNELS]> {
+        let mean_sq = self.gmsi.next()?;
+        let mut result = [0.0; MAX_CHANNELS];
+
+        for ch in 0..MAX_CHANNELS {
+            result[ch] = mean_sq[ch] * self.channel_weights[ch];
+        }
+
+        Some(result)
+    }
 }
 
 impl<I> Iterator for GatedLoudnessIter<I>
@@ -120,11 +131,11 @@ where
     type Item = f64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mean_sq = self.gmsi.next()?;
+        let weighted = self.next_unsummed()?;
 
         let mut sum = 0.0;
         for ch in 0..MAX_CHANNELS {
-            sum += self.channel_weights[ch] * mean_sq[ch];
+            sum += weighted[ch];
         }
 
         let loudness = -0.691 + 10.0 * sum.log10();
@@ -263,6 +274,110 @@ mod tests {
 
         // for _ in 0..8 {
         //     println!("{:?}", gmsi.next());
+        // }
+
+        // return;
+    }
+
+    #[test]
+    fn gated_loudness_iter_next_unsummed() {
+        const FREQUENCIES: [u32; MAX_CHANNELS] = [440, 480, 520, 560, 600];
+        const CHANNEL_WEIGHTS: [f64; MAX_CHANNELS] = [0.8, 0.9, 1.0, 1.1, 1.2];
+
+        let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            [0.26666703703703565, 0.30006000000001265, 0.3333337962962951, 0.3666687037036987, 0.40012500000000906],
+            [0.26666703703703537, 0.30006000000001365, 0.33333379629629406, 0.3666687037036971, 0.4001250000000068],
+            [0.2666670370370345, 0.3000600000000069, 0.33333379629629295, 0.3666687037036936, 0.4001250000000065],
+            [0.26666703703703387, 0.30006000000000094, 0.3333337962962912, 0.3666687037036906, 0.400125000000003],
+            [0.2666670370370326, 0.300060000000003, 0.3333337962962899, 0.36666870370368976, 0.4001249999999998],
+            [0.26666703703703176, 0.30006000000000316, 0.3333337962962904, 0.36666870370369, 0.40012499999999346],
+            [0.2666670370370321, 0.30006000000000344, 0.3333337962962902, 0.36666870370368926, 0.4001249999999801],
+            [0.2666670370370324, 0.30006000000000754, 0.3333337962962904, 0.3666687037036911, 0.40012499999998685],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next_unsummed().unwrap();
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+            [0.8, 0.9, 1.0, 1.1, 1.2],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next_unsummed().unwrap();
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            [0.26666814814814205, 0.30024000000000134, 0.33333518518517663, 0.36667481481480857, 0.4005000000000081],
+            [0.26666814814813933, 0.3002400000000024, 0.33333518518517297, 0.3666748148148067, 0.4004999999999996],
+            [0.2666681481481379, 0.30024000000000145, 0.3333351851851718, 0.36667481481480046, 0.4004999999999838],
+            [0.2666681481481374, 0.30023999999999895, 0.33333518518517324, 0.3666748148148005, 0.4004999999999706],
+            [0.2666681481481387, 0.3002399999999908, 0.3333351851851759, 0.366674814814803, 0.4004999999999708],
+            [0.2666681481481412, 0.3002399999999954, 0.3333351851851782, 0.36667481481480424, 0.4004999999999586],
+            [0.2666681481481426, 0.3002399999999964, 0.33333518518517896, 0.3666748148148186, 0.400499999999932],
+            [0.2666681481481438, 0.3002400000000046, 0.3333351851851805, 0.3666748148148284, 0.40049999999997293],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next_unsummed().unwrap();
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            [0.3999999999999994, 0.45, 0.4999999999999989, 0.5500000000000003, 0.6000000000000004],
+            [0.39999999999999925, 0.4499999999999999, 0.4999999999999981, 0.5500000000000002, 0.5999999999999999],
+            [0.39999999999999963, 0.44999999999999957, 0.5000000000000027, 0.5499999999999998, 0.6000000000000002],
+            [0.39999999999999936, 0.44999999999999984, 0.5000000000000017, 0.5500000000000007, 0.6000000000000001],
+            [0.3999999999999996, 0.4499999999999999, 0.5000000000000011, 0.5500000000000017, 0.6000000000000002],
+            [0.3999999999999996, 0.44999999999999984, 0.5000000000000019, 0.5500000000000005, 0.6000000000000004],
+            [0.39999999999999936, 0.4500000000000001, 0.5000000000000012, 0.5500000000000003, 0.6000000000000004],
+            [0.39999999999999936, 0.4499999999999995, 0.4999999999999999, 0.5500000000000004, 0.5999999999999995],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next_unsummed().unwrap();
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
+        // for _ in 0..8 {
+        //     println!("{:?}", gli.next_unsummed());
         // }
 
         // return;
