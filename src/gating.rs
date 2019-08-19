@@ -99,6 +99,20 @@ where
     channel_weights: [f64; MAX_CHANNELS],
 }
 
+impl<I> GatedLoudnessIter<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]>
+{
+    pub fn new(sample_iter: I, sample_rate: u32, channel_weights: [f64; MAX_CHANNELS]) -> Self {
+        let gmsi = GatedMeanSquareIter::new(sample_iter, sample_rate);
+
+        Self {
+            gmsi,
+            channel_weights,
+        }
+    }
+}
+
 impl<I> Iterator for GatedLoudnessIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
@@ -126,26 +140,26 @@ mod tests {
     use crate::wave::WaveKind;
     use crate::wave::WaveGen;
 
-    const CYCLE_LEN: usize = 128;
+    // const CYCLE_LEN: usize = 128;
 
-    #[derive(Default)]
-    struct SampleIter(usize);
+    // #[derive(Default)]
+    // struct SampleIter(usize);
 
-    impl SampleIter {
-        fn new() -> Self {
-            Default::default()
-        }
-    }
+    // impl SampleIter {
+    //     fn new() -> Self {
+    //         Default::default()
+    //     }
+    // }
 
-    impl Iterator for SampleIter {
-        type Item = [f64; MAX_CHANNELS];
+    // impl Iterator for SampleIter {
+    //     type Item = [f64; MAX_CHANNELS];
 
-        fn next(&mut self) -> Option<Self::Item> {
-            let x = (2.0 * self.0 as f64 / CYCLE_LEN as f64) - 1.0;
-            self.0 = (self.0 + 1) % CYCLE_LEN;
-            Some([-x, -x / 2.0, 0.0, x / 2.0, x])
-        }
-    }
+    //     fn next(&mut self) -> Option<Self::Item> {
+    //         let x = (2.0 * self.0 as f64 / CYCLE_LEN as f64) - 1.0;
+    //         self.0 = (self.0 + 1) % CYCLE_LEN;
+    //         Some([-x, -x / 2.0, 0.0, x / 2.0, x])
+    //     }
+    // }
 
     #[test]
     fn gated_mean_square_iter() {
@@ -223,8 +237,122 @@ mod tests {
             }
         }
 
+        let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES);
+        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+
+        let expected_results = [
+            [0.4999999999999992, 0.5, 0.4999999999999989, 0.5000000000000002, 0.5000000000000003],
+            [0.49999999999999906, 0.4999999999999999, 0.4999999999999981, 0.5000000000000001, 0.4999999999999999],
+            [0.4999999999999995, 0.4999999999999995, 0.5000000000000027, 0.49999999999999983, 0.5000000000000002],
+            [0.49999999999999917, 0.49999999999999983, 0.5000000000000017, 0.5000000000000006, 0.5000000000000001],
+            [0.49999999999999944, 0.4999999999999999, 0.5000000000000011, 0.5000000000000016, 0.5000000000000002],
+            [0.49999999999999944, 0.49999999999999983, 0.5000000000000019, 0.5000000000000004, 0.5000000000000003],
+            [0.49999999999999917, 0.5000000000000001, 0.5000000000000012, 0.5000000000000002, 0.5000000000000003],
+            [0.49999999999999917, 0.49999999999999944, 0.4999999999999999, 0.5000000000000003, 0.4999999999999996],
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gmsi.next().unwrap();
+
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_abs_diff_eq!(e, p);
+            }
+        }
+
         // for _ in 0..8 {
         //     println!("{:?}", gmsi.next());
         // }
+
+        // return;
+    }
+
+    #[test]
+    fn gated_loudness_iter() {
+        const FREQUENCIES: [u32; MAX_CHANNELS] = [440, 480, 520, 560, 600];
+        const CHANNEL_WEIGHTS: [f64; MAX_CHANNELS] = [0.8, 0.9, 1.0, 1.1, 1.2];
+
+        let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            1.527977014965285,
+            1.5279770149652738,
+            1.5279770149652414,
+            1.5279770149652028,
+            1.5279770149651917,
+            1.5279770149651748,
+            1.5279770149651393,
+            1.5279770149651726,
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next().unwrap();
+            assert_abs_diff_eq!(*expected, produced);
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+            6.2987000433601885,
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next().unwrap();
+            assert_abs_diff_eq!(*expected, produced);
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            1.5294452403980916,
+            1.5294452403980507,
+            1.5294452403979846,
+            1.5294452403979464,
+            1.5294452403979424,
+            1.529445240397938,
+            1.5294452403979144,
+            1.5294452403980756,
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next().unwrap();
+            assert_abs_diff_eq!(*expected, produced);
+        }
+
+        let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES);
+        let mut gli = GatedLoudnessIter::new(sample_iter, 48000, CHANNEL_WEIGHTS);
+
+        let expected_results = [
+            3.2884000867203746,
+            3.2884000867203715,
+            3.2884000867203795,
+            3.2884000867203795,
+            3.28840008672038,
+            3.28840008672038,
+            3.2884000867203786,
+            3.288400086720374,
+        ];
+
+        for expected in expected_results.iter() {
+            let produced = gli.next().unwrap();
+            assert_abs_diff_eq!(*expected, produced);
+        }
+
+        // for _ in 0..8 {
+        //     println!("{:?}", gli.next());
+        // }
+
+        // return;
     }
 }
