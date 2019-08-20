@@ -11,7 +11,7 @@ const GATE_DELTA_MS: u64 = 100;
 const GATE_FACTOR: u64 = 4;
 const GATE_LENGTH_MS: u64 = GATE_DELTA_MS * GATE_FACTOR;
 
-pub struct GatedMeanSquareIter<I>
+pub struct GatedPowerIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
@@ -22,7 +22,7 @@ where
     initialized: bool,
 }
 
-impl<I> GatedMeanSquareIter<I>
+impl<I> GatedPowerIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<I> Iterator for GatedMeanSquareIter<I>
+impl<I> Iterator for GatedPowerIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
@@ -84,7 +84,7 @@ where
     }
 }
 
-impl<I> FusedIterator for GatedMeanSquareIter<I>
+impl<I> FusedIterator for GatedPowerIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {}
@@ -93,7 +93,7 @@ pub struct GatedLoudnessIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
-    gmsi: GatedMeanSquareIter<I>,
+    gpi: GatedPowerIter<I>,
 
     // Denoted as the `G` weights in the tech doc.
     channel_weights: [f64; MAX_CHANNELS],
@@ -104,10 +104,10 @@ where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
     pub fn new(sample_iter: I, sample_rate: u32, channel_weights: [f64; MAX_CHANNELS]) -> Self {
-        let gmsi = GatedMeanSquareIter::new(sample_iter, sample_rate);
+        let gpi = GatedPowerIter::new(sample_iter, sample_rate);
 
         Self {
-            gmsi,
+            gpi,
             channel_weights,
         }
     }
@@ -122,7 +122,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // This performs the calculation done in equation #4 in the ITU BS.1770 tech spec.
 
-        let block_powers = self.gmsi.next()?;
+        let block_powers = self.gpi.next()?;
 
         // Weight the block powers for each channel according to the channel weights.
         let mut block_powers_weighted = [0.0; MAX_CHANNELS];
@@ -145,33 +145,12 @@ mod tests {
     use crate::wave::WaveKind;
     use crate::wave::WaveGen;
 
-    // const CYCLE_LEN: usize = 128;
-
-    // #[derive(Default)]
-    // struct SampleIter(usize);
-
-    // impl SampleIter {
-    //     fn new() -> Self {
-    //         Default::default()
-    //     }
-    // }
-
-    // impl Iterator for SampleIter {
-    //     type Item = [f64; MAX_CHANNELS];
-
-    //     fn next(&mut self) -> Option<Self::Item> {
-    //         let x = (2.0 * self.0 as f64 / CYCLE_LEN as f64) - 1.0;
-    //         self.0 = (self.0 + 1) % CYCLE_LEN;
-    //         Some([-x, -x / 2.0, 0.0, x / 2.0, x])
-    //     }
-    // }
-
     #[test]
-    fn gated_mean_square_iter() {
+    fn gated_power_iter() {
         const FREQUENCIES: [u32; MAX_CHANNELS] = [440, 480, 520, 560, 600];
 
         let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES);
-        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+        let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
             [0.33333379629629456, 0.3334000000000141, 0.3333337962962951, 0.3333351851851806, 0.33343750000000755],
@@ -185,7 +164,7 @@ mod tests {
         ];
 
         for expected in expected_results.iter() {
-            let produced = gmsi.next().unwrap();
+            let produced = gpi.next().unwrap();
 
             for ch in 0..expected.len().max(produced.len()) {
                 let e = expected[ch];
@@ -195,7 +174,7 @@ mod tests {
         }
 
         let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES);
-        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+        let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
             [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -209,7 +188,7 @@ mod tests {
         ];
 
         for expected in expected_results.iter() {
-            let produced = gmsi.next().unwrap();
+            let produced = gpi.next().unwrap();
 
             for ch in 0..expected.len().max(produced.len()) {
                 let e = expected[ch];
@@ -219,7 +198,7 @@ mod tests {
         }
 
         let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES);
-        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+        let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
             [0.3333351851851775, 0.33360000000000145, 0.33333518518517663, 0.33334074074073505, 0.33375000000000676],
@@ -233,7 +212,7 @@ mod tests {
         ];
 
         for expected in expected_results.iter() {
-            let produced = gmsi.next().unwrap();
+            let produced = gpi.next().unwrap();
 
             for ch in 0..expected.len().max(produced.len()) {
                 let e = expected[ch];
@@ -243,7 +222,7 @@ mod tests {
         }
 
         let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES);
-        let mut gmsi = GatedMeanSquareIter::new(sample_iter, 48000);
+        let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
             [0.4999999999999992, 0.5, 0.4999999999999989, 0.5000000000000002, 0.5000000000000003],
@@ -257,7 +236,7 @@ mod tests {
         ];
 
         for expected in expected_results.iter() {
-            let produced = gmsi.next().unwrap();
+            let produced = gpi.next().unwrap();
 
             for ch in 0..expected.len().max(produced.len()) {
                 let e = expected[ch];
@@ -267,7 +246,7 @@ mod tests {
         }
 
         // for _ in 0..8 {
-        //     println!("{:?}", gmsi.next());
+        //     println!("{:?}", gpi.next());
         // }
 
         // return;
