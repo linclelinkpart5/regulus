@@ -21,13 +21,11 @@ impl Util {
     }
 
     /// Using a sample rate, calculates the number of samples in a given number of milliseconds.
-    pub fn ms_to_samples(ms: u64, sample_rate: u32, round_nearest: bool) -> u64 {
-        let numerator = ms * sample_rate as u64;
+    pub fn ms_to_samples(ms: u64, sample_rate: u32) -> u64 {
+        let num = ms * sample_rate as u64;
 
-        let result = numerator / 1000;
-
-        if round_nearest && numerator % 1000 >= 500 { result + 1 }
-        else { result }
+        // Always round to the nearest sample.
+        (num / 1000) + if num % 1000 >= 500 { 1 } else { 0 }
     }
 }
 
@@ -38,23 +36,19 @@ mod tests {
     #[test]
     fn util_ms_to_samples() {
         let inputs_and_expected = vec![
-            ((100, 44100, false), 4410),
-            ((100, 44100, true), 4410),
-            ((100, 44123, false), 4412),
-            ((100, 44123, true), 4412),
-            ((1, 44100, false), 44),
-            ((1, 44100, true), 44),
-            ((1, 44600, false), 44),
-            ((1, 44600, true), 45),
-            ((1, 44500, false), 44),
-            ((1, 44500, true), 45),
-            ((1, 44499, false), 44),
-            ((1, 44499, true), 44),
+            ((100, 44100), 4410),
+            ((100, 44123), 4412),
+            ((1, 44100), 44),
+            ((1, 44600), 45),
+            ((1, 44500), 45),
+            ((1, 44499), 44),
+            ((487, 12345), 6012),
+            ((489, 12345), 6037),
         ];
 
         for (inputs, expected) in inputs_and_expected {
-            let (ms, sample_rate, round_nearest) = inputs;
-            let produced = Util::ms_to_samples(ms, sample_rate, round_nearest);
+            let (ms, sample_rate) = inputs;
+            let produced = Util::ms_to_samples(ms, sample_rate);
 
             assert_eq!(expected, produced)
         }

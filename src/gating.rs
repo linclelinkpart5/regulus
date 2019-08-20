@@ -27,8 +27,8 @@ where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
     pub fn new(sample_iter: I, sample_rate: u32) -> Self {
-        let samples_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate, false) as usize;
-        let samples_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate, false) as usize;
+        let samples_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
+        let samples_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
 
         let ring_buffer = SliceDeque::with_capacity(samples_per_gate);
 
