@@ -6,7 +6,6 @@ pub mod stats;
 pub mod types;
 pub mod util;
 pub mod filter;
-pub mod mean_sq;
 pub mod gating;
 #[cfg(test)] pub mod wave;
 

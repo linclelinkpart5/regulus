@@ -3,7 +3,6 @@ use std::iter::FusedIterator;
 
 use slice_deque::SliceDeque;
 
-use crate::mean_sq::MeanSquare;
 use crate::constants::MAX_CHANNELS;
 use crate::util::Util;
 
@@ -49,8 +48,6 @@ where
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut msq = MeanSquare::new();
-
         let samples_to_take = if !self.initialized {
             // Set the initialized flag and take an entire gate's worth of samples.
             self.initialized = true;
@@ -75,12 +72,16 @@ where
         assert_eq!(self.samples_per_gate, self.ring_buffer.len());
 
         // Calculate the mean squares of the current ring buffer.
-        msq.add_samples(self.ring_buffer.as_slice());
-        let result = msq.mean_sqs();
+        let mut msqs = [0.0f64; MAX_CHANNELS];
+        for ch in 0..MAX_CHANNELS {
+            for sample in &self.ring_buffer {
+                msqs[ch] += sample[ch] * sample[ch];
+            }
 
-        // println!("{}, {:?}", msq.num_samples(), result);
+            msqs[ch] /= self.samples_per_gate as f64;
+        }
 
-        Some(result)
+        Some(msqs)
     }
 }
 
