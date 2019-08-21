@@ -1,6 +1,7 @@
 
 use crate::constants::MAX_CHANNELS;
 
+#[derive(Copy, Clone)]
 pub struct Stats {
     pub count: usize,
     pub mean: [f64; MAX_CHANNELS],
@@ -14,16 +15,16 @@ impl Stats {
         }
     }
 
-    pub fn add(&mut self, sample: [f64; MAX_CHANNELS]) {
+    pub fn add(&mut self, element: [f64; MAX_CHANNELS]) {
         if self.count == 0 {
-            // If no existing samples have been analyzed, just store the new sample.
-            self.mean = sample;
+            // If no existing elements have been analyzed, just store the new element.
+            self.mean = element;
             self.count = 1;
         }
         else {
             // Calculate the incremental average.
             for ch in 0..MAX_CHANNELS {
-                self.mean[ch] = (self.count as f64 * self.mean[ch] + sample[ch]) / (self.count + 1) as f64;
+                self.mean[ch] = (self.count as f64 * self.mean[ch] + element[ch]) / (self.count + 1) as f64;
             }
 
             self.count += 1;
@@ -54,64 +55,72 @@ impl Stats {
 mod tests {
     use super::*;
 
+    fn validate(expected_mean: [f64; MAX_CHANNELS], expected_count: usize, produced: Stats) {
+        let produced_mean = produced.mean;
+        let produced_count = produced.count;
+
+        for ch in 0..expected_mean.len().max(produced_mean.len()) {
+            assert_abs_diff_eq!(expected_mean[ch], produced_mean[ch]);
+        }
+        assert_eq!(expected_count, produced_count);
+    }
+
     #[test]
-    fn stats() {
+    fn stats_add() {
+        const INITIAL: [f64; MAX_CHANNELS] = [0.1, 0.2, 0.3, 0.4, 0.5];
+
         let mut stats = Stats::new();
-        assert_eq!(stats.count, 0);
+        validate([0.0; MAX_CHANNELS], 0, stats);
 
-        let expected = [0.0f64; MAX_CHANNELS];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+        stats.add(INITIAL);
+        validate(INITIAL, 1, stats);
 
-        stats.add([0.1f64, 0.2, 0.3, 0.4, 0.5]);
-        stats.add([0.1f64, 0.2, 0.3, 0.4, 0.5]);
-        stats.add([0.1f64, 0.2, 0.3, 0.4, 0.5]);
-        assert_eq!(stats.count, 3);
-
-        let expected = [0.1, 0.2, 0.3, 0.4, 0.5];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+        stats.add(INITIAL);
+        stats.add(INITIAL);
+        validate(INITIAL, 3, stats);
 
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
-        assert_eq!(stats.count, 4);
-
-        let expected = [0.325, 0.4, 0.475, 0.55, 0.625];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+        validate([1.3 / 4.0, 1.6 / 4.0, 1.9 / 4.0, 2.2 / 4.0, 2.5 / 4.0], 4, stats);
 
         stats.add([-1.0, -0.5, 0.0, 0.5, 1.0]);
-        assert_eq!(stats.count, 5);
-
-        let expected = [0.06, 0.22, 0.38, 0.54, 0.7];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+        validate([0.3 / 5.0, 1.1 / 5.0, 1.9 / 5.0, 2.7 / 5.0, 3.5 / 5.0], 5, stats);
 
         stats.add([0.0, 0.2, 0.4, 0.6, 0.8]);
-        assert_eq!(stats.count, 6);
-
-        let expected = [0.05, 0.21666666666666667, 0.3833333333333333, 0.55, 0.7166666666666667];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+        validate([0.3 / 6.0, 1.3 / 6.0, 2.3 / 6.0, 3.3 / 6.0, 4.3 / 6.0], 6, stats);
 
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
-        assert_eq!(stats.count, 9);
+        validate([3.3 / 9.0, 4.3 / 9.0, 5.3 / 9.0, 6.3 / 9.0, 7.3 / 9.0], 9, stats);
+    }
 
-        let expected = [0.36666666666666664, 0.47777777777777775, 0.5888888888888889, 0.7, 0.8111111111111111];
-        let produced = stats.mean;
-        for ch in 0..expected.len().max(produced.len()) {
-            assert_abs_diff_eq!(expected[ch], produced[ch]);
-        }
+    #[test]
+    fn stats_merge() {
+        let mut stats_a = Stats::new();
+        stats_a.add([0.1, 0.2, 0.3, 0.4, 0.5]);
+        stats_a.add([0.6, 0.7, 0.8, 0.9, 1.0]);
+
+        let mut stats_b = Stats::new();
+        stats_b.add([0.01, 0.02, 0.03, 0.04, 0.05]);
+        stats_b.add([0.06, 0.07, 0.08, 0.09, 0.10]);
+
+        let merged = stats_a.merge(stats_b);
+        validate([0.77 / 4.0, 0.99 / 4.0, 1.21 / 4.0, 1.43 / 4.0, 1.65 / 4.0], 4, merged);
+
+        let merged = stats_b.merge(stats_a);
+        validate([0.77 / 4.0, 0.99 / 4.0, 1.21 / 4.0, 1.43 / 4.0, 1.65 / 4.0], 4, merged);
+
+        let stats_b = Stats::new();
+
+        let merged = stats_a.merge(stats_b);
+        validate(stats_a.mean, stats_a.count, merged);
+
+        let merged = stats_b.merge(stats_a);
+        validate(stats_a.mean, stats_a.count, merged);
+
+        let stats_a = Stats::new();
+
+        let merged = stats_a.merge(stats_b);
+        validate([0.0; MAX_CHANNELS], 0, merged);
     }
 }
