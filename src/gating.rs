@@ -5,10 +5,12 @@ use slice_deque::SliceDeque;
 
 use crate::constants::MAX_CHANNELS;
 use crate::util::Util;
+use crate::stats::Stats;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_FACTOR: u64 = 4;
 const GATE_LENGTH_MS: u64 = GATE_DELTA_MS * GATE_FACTOR;
+const ABSOLUTE_LOUDNESS_THRESHOLD: f64 = -70.0;
 
 pub struct GatedPowerIter<I>
 where
@@ -72,16 +74,17 @@ where
         assert_eq!(self.samples_per_gate, self.ring_buffer.len());
 
         // Calculate the mean squares of the current ring buffer.
-        let mut msqs = [0.0f64; MAX_CHANNELS];
+        let mut channel_powers = [0.0f64; MAX_CHANNELS];
         for ch in 0..MAX_CHANNELS {
+            let mut channel_energy = 0.0;
             for sample in &self.ring_buffer {
-                msqs[ch] += sample[ch] * sample[ch];
+                channel_energy += sample[ch] * sample[ch];
             }
 
-            msqs[ch] /= self.samples_per_gate as f64;
+            channel_powers[ch] = channel_energy / self.samples_per_gate as f64;
         }
 
-        Some(msqs)
+        Some(channel_powers)
     }
 }
 
@@ -98,6 +101,9 @@ where
 
     // Denoted as the `G` weights in the tech doc.
     channel_weights: [f64; MAX_CHANNELS],
+
+    averager: Stats,
+    absolutely_loud_blocks: Vec<(f64, [f64; MAX_CHANNELS])>,
 }
 
 impl<I> GatedLoudnessIter<I>
@@ -110,7 +116,49 @@ where
         Self {
             gpi,
             channel_weights,
+            averager: Stats::new(),
+            absolutely_loud_blocks: Vec::new(),
         }
+    }
+}
+
+impl<I> GatedLoudnessIter<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]>
+{
+    pub fn absolute_loudness(&self) -> f64 {
+        // This performs the calculation done in equation #5 in the ITU BS.1770 tech spec.
+        // This is the loudness of the average of the per-channel power of blocks that were marked as "loud"
+        // (i.e. the loudness of that block was above the absolute loudness threshold) during the initial pass.
+        Util::block_loudness(&self.averager.mean, &self.channel_weights)
+    }
+
+    #[inline]
+    pub fn relative_loudness_threshold(&self) -> f64 {
+        // This performs the calculation done in equation #6 in the ITU BS.1770 tech spec.
+        // The relative loudness threshold is the absolute loudness minus 10.0.
+        self.absolute_loudness() - 10.0
+    }
+
+    pub fn relative_loudness(&self) -> f64 {
+        // This performs the calculation done in equation #7 in the ITU BS.1770 tech spec.
+        // From the collected of saved blocks that were marked as "absolutely loud",
+        // only those that exceed the relative loudness threshold need to be selected and averaged.
+        let mut relative_averager = Stats::new();
+
+        let relative_loudness_threshold = self.relative_loudness_threshold();
+
+        for (block_loudness, channel_powers) in &self.absolutely_loud_blocks {
+            // These blocks are already known to be above the absolute loudness threshold.
+            // However they also need to be over the relative loudness threshold for this calculation.
+            if block_loudness > &relative_loudness_threshold {
+                relative_averager.add(channel_powers)
+            }
+        }
+
+        let relative_loudness = Util::block_loudness(&relative_averager.mean, &self.channel_weights);
+
+        relative_loudness
     }
 }
 
@@ -121,19 +169,14 @@ where
     type Item = f64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // This performs the calculation done in equation #4 in the ITU BS.1770 tech spec.
+        let channel_powers = self.gpi.next()?;
+        let block_loudness = Util::block_loudness(&channel_powers, &self.channel_weights);
 
-        let block_powers = self.gpi.next()?;
-
-        // Weight the block powers for each channel according to the channel weights.
-        let mut block_powers_weighted = [0.0; MAX_CHANNELS];
-        for ch in 0..MAX_CHANNELS {
-            block_powers_weighted[ch] = block_powers[ch] * self.channel_weights[ch];
+        // If the block loudness is greater than the absolute loudness threshold, save the channel powers.
+        if block_loudness > ABSOLUTE_LOUDNESS_THRESHOLD {
+            self.averager.add(&channel_powers);
+            self.absolutely_loud_blocks.push((block_loudness, channel_powers))
         }
-
-        // Calculate the loudness of this block from the total block power.
-        let total_block_power = block_powers_weighted.iter().sum::<f64>();
-        let block_loudness = -0.691 + 10.0 * total_block_power.log10();
 
         Some(block_loudness)
     }
