@@ -6,6 +6,54 @@ use crate::util::Util;
 
 const ABSOLUTE_LOUDNESS_THRESHOLD: f64 = -70.0;
 
+pub struct Loudness;
+
+impl Loudness {
+    pub fn from_gated_channel_powers<I>(gated_channel_powers_iter: I, channel_weights: [f64; MAX_CHANNELS]) -> f64
+    where
+        I: IntoIterator<Item = [f64; MAX_CHANNELS]>
+    {
+        let mut averager = Stats::new();
+        let mut absolutely_loud_blocks = Vec::new();
+
+        for (j, channel_powers) in gated_channel_powers_iter.into_iter().enumerate() {
+            let block_loudness = Util::block_loudness(&channel_powers, &channel_weights);
+
+            // If the block loudness is greater than the absolute loudness threshold, save the channel powers.
+            if block_loudness > ABSOLUTE_LOUDNESS_THRESHOLD {
+                averager.add(&channel_powers);
+                absolutely_loud_blocks.push((j, block_loudness, channel_powers))
+            }
+        }
+
+        // This performs the calculation done in equation #5 in the ITU BS.1770 tech spec.
+        // This is the loudness of the average of the per-channel power of blocks that were marked as "loud"
+        // (i.e. blocks with loudness above the absolute loudness threshold) during the initial pass.
+        let absolute_loudness = Util::block_loudness(&averager.mean, &channel_weights);
+
+        // This performs the calculation done in equation #6 in the ITU BS.1770 tech spec.
+        // The relative loudness threshold is the absolute loudness minus 10.0.
+        let relative_loudness_threshold = absolute_loudness - 10.0;
+
+        // This performs the calculation done in equation #7 in the ITU BS.1770 tech spec.
+        // From the collected of saved blocks that were marked as "absolutely loud",
+        // only those that exceed the relative loudness threshold need to be selected and averaged.
+        let mut relative_averager = Stats::new();
+
+        for (_, block_loudness, channel_powers) in absolutely_loud_blocks {
+            // These blocks are already known to be above the absolute loudness threshold.
+            // However, for this calculation, they also need to be over the relative loudness threshold.
+            if block_loudness > relative_loudness_threshold {
+                relative_averager.add(&channel_powers)
+            }
+        }
+
+        let relative_loudness = Util::block_loudness(&relative_averager.mean, &channel_weights);
+
+        relative_loudness
+    }
+}
+
 pub struct GatedLoudnessIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
@@ -39,7 +87,7 @@ impl<I> GatedLoudnessIter<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
-    pub fn absolute_loudness(&self) -> f64 {
+    fn absolute_loudness(&self) -> f64 {
         // This performs the calculation done in equation #5 in the ITU BS.1770 tech spec.
         // This is the loudness of the average of the per-channel power of blocks that were marked as "loud"
         // (i.e. blocks with loudness above the absolute loudness threshold) during the initial pass.
@@ -47,13 +95,13 @@ where
     }
 
     #[inline]
-    pub fn relative_loudness_threshold(&self) -> f64 {
+    fn relative_loudness_threshold(&self) -> f64 {
         // This performs the calculation done in equation #6 in the ITU BS.1770 tech spec.
         // The relative loudness threshold is the absolute loudness minus 10.0.
         self.absolute_loudness() - 10.0
     }
 
-    pub fn relative_loudness(&self) -> f64 {
+    fn relative_loudness(&self) -> f64 {
         // This performs the calculation done in equation #7 in the ITU BS.1770 tech spec.
         // From the collected of saved blocks that were marked as "absolutely loud",
         // only those that exceed the relative loudness threshold need to be selected and averaged.

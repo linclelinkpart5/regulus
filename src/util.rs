@@ -38,7 +38,7 @@ impl Util {
             weighted_channel_powers[ch] = channel_powers[ch] * channel_weights[ch];
         }
 
-        // Calculate the loudness of this block from the total weight channel power.
+        // Calculate the loudness of this block from the total weighted channel power.
         let block_power = weighted_channel_powers.iter().sum::<f64>();
         let block_loudness = -0.691 + 10.0 * block_power.log10();
 
