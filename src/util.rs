@@ -44,6 +44,17 @@ impl Util {
 
         block_loudness
     }
+
+    pub fn block_peak(block_sample: &[f64; MAX_CHANNELS]) -> f64 {
+        // Take the highest absolute value found in this sample.
+        let mut peak = 0.0f64;
+        for ch in 0..MAX_CHANNELS {
+            let mag = block_sample[ch].abs();
+            peak = peak.max(mag);
+        }
+
+        peak
+    }
 }
 
 #[cfg(test)]
