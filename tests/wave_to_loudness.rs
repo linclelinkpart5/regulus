@@ -50,5 +50,5 @@ fn test_nominal_frequency_reading() {
     let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter, [1.0, 1.0, 1.0, 1.0, 1.0]);
 
     // assert_abs_diff_eq!(-3.01, loudness);
-    assert_abs_diff_eq!(-3.0102799213963345, loudness);
+    assert_abs_diff_eq!(-3.010279921396327, loudness);
 }

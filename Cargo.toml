@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 strum = "0.15.0"
-slice-deque = "0.2.4"
+circular-queue = "0.2.1"
 
 [dev-dependencies]
 approx = "0.3.2"
