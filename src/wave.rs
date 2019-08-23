@@ -56,3 +56,33 @@ impl Iterator for WaveGen {
         Some(o)
     }
 }
+
+pub struct SineGen {
+    sample_rate: u32,
+    sample_index: u32,
+    frequency: f64,
+    amplitude: f64,
+}
+
+impl SineGen {
+    pub fn new(sample_rate: u32, frequency: f64, amplitude: f64) -> Self {
+        Self {
+            sample_rate,
+            sample_index: 0,
+            frequency,
+            amplitude,
+        }
+    }
+}
+
+impl Iterator for SineGen {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let x = self.sample_index as f64 * self.frequency / self.sample_rate as f64;
+        let y = (2.0 * PI * x).sin() * self.amplitude;
+        self.sample_index = (self.sample_index + 1) % self.sample_rate;
+
+        Some(y)
+    }
+}

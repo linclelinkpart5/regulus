@@ -42,5 +42,26 @@ pub mod loudness;
 //     }
 // }
 
-fn main() {
+#[cfg(test)]
+mod tests {
+    use super::filter::FilteredSampleIter;
+    use super::gating::GatedPowerIter;
+    use super::loudness::Loudness;
+
+    use super::wave::SineGen;
+
+    #[test]
+    fn nominal_frequency_reading() {
+        // As per the ITU BS.1770 spec:
+        // If a 0 dB FS, 997 Hz sine wave is applied to the left, center, or right channel input,
+        // the indicated loudness will equal -3.01 LKFS.
+        let sample_rate: u32 = 48000;
+        let raw_signal = SineGen::new(sample_rate, 997.0, 1.0).map(|x| [x, 0.0, 0.0, 0.0, 0.0]).take(sample_rate as usize * 10);
+        let filtered_signal = FilteredSampleIter::new(raw_signal, sample_rate);
+        let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
+        let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter, [1.0, 1.0, 1.0, 1.0, 1.0]);
+
+        // assert_abs_diff_eq!(-3.01, loudness);
+        assert_abs_diff_eq!(-3.010279921396327, loudness);
+    }
 }
