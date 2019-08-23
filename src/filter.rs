@@ -130,6 +130,41 @@ impl Filter {
     }
 }
 
+pub struct FilteredSampleIter<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]>
+{
+    sample_iter: I,
+    filter: Filter,
+}
+
+impl<I> FilteredSampleIter<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]>
+{
+    pub fn new(sample_iter: I, sample_rate: u32) -> Self {
+        let filter = Filter::new(sample_rate);
+        Self {
+            sample_iter,
+            filter,
+        }
+    }
+}
+
+impl<I> Iterator for FilteredSampleIter<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]>
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let raw_sample = self.sample_iter.next()?;
+        let filtered_sample = self.filter.apply(&raw_sample);
+
+        Some(filtered_sample)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
