@@ -63,8 +63,4 @@ impl Loudness {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::wave::WaveKind;
-    use crate::wave::WaveGen;
 }
