@@ -3,7 +3,6 @@
 pub mod bin;
 pub mod constants;
 pub mod stats;
-pub mod types;
 pub mod util;
 pub mod filter;
 pub mod gating;

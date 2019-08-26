@@ -76,7 +76,7 @@ enum Kind {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Applicator {
+struct Applicator {
     biquad: Biquad,
     s1: [f64; MAX_CHANNELS],
     s2: [f64; MAX_CHANNELS],
@@ -111,7 +111,7 @@ impl Applicator {
 /// The first pass is a shelving filter, which accounts for the acoustic effects of the listener's (spherical) head.
 /// The second pass is a simple high pass filter.
 #[derive(Copy, Clone, Debug)]
-pub struct Filter {
+struct Filter {
     sample_rate: u32,
     pass_a: Applicator,
     pass_b: Applicator,
