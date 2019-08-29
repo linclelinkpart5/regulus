@@ -6,6 +6,7 @@ pub mod util;
 pub mod filter;
 pub mod gating;
 pub mod loudness;
+pub mod peak;
 #[cfg(test)] pub mod wave;
 
 // #[derive(Clone, Copy, Debug)]
