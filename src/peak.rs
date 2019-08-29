@@ -39,3 +39,57 @@ where
         Some(sample)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_peak_iter() {
+        let samples = [
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+            [-0.1, 0.2, -0.3, 0.4, -0.5],
+        ];
+
+        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
+
+        while let Some(_) = sample_peak_iter.next() {}
+
+        let expected = [0.1, 0.2, 0.3, 0.4, 0.5];
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = sample_peak_iter.peak_per_channel[ch];
+            assert_abs_diff_eq!(e, p);
+        }
+
+        let samples = [
+            [0.1, 0.2, 0.3, 0.4, 0.5],
+            [-1.0, 1.0, -1.0, 1.0, -1.0],
+        ];
+
+        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
+
+        while let Some(_) = sample_peak_iter.next() {}
+
+        let expected = [1.0, 1.0, 1.0, 1.0, 1.0];
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = sample_peak_iter.peak_per_channel[ch];
+            assert_abs_diff_eq!(e, p);
+        }
+
+        let samples = [
+        ];
+
+        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
+
+        while let Some(_) = sample_peak_iter.next() {}
+
+        let expected = [0.0, 0.0, 0.0, 0.0, 0.0];
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = sample_peak_iter.peak_per_channel[ch];
+            assert_abs_diff_eq!(e, p);
+        }
+    }
+}
