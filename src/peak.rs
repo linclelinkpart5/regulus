@@ -51,9 +51,13 @@ mod tests {
             [-0.1, 0.2, -0.3, 0.4, -0.5],
         ];
 
+        let mut original_iter = samples.iter().copied();
         let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
 
-        while let Some(_) = sample_peak_iter.next() {}
+        while let Some(produced) = sample_peak_iter.next() {
+            let expected = original_iter.next().unwrap();
+            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
+        }
 
         let expected = [0.1, 0.2, 0.3, 0.4, 0.5];
         for ch in 0..MAX_CHANNELS {
@@ -67,9 +71,13 @@ mod tests {
             [-1.0, 1.0, -1.0, 1.0, -1.0],
         ];
 
+        let mut original_iter = samples.iter().copied();
         let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
 
-        while let Some(_) = sample_peak_iter.next() {}
+        while let Some(produced) = sample_peak_iter.next() {
+            let expected = original_iter.next().unwrap();
+            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
+        }
 
         let expected = [1.0, 1.0, 1.0, 1.0, 1.0];
         for ch in 0..MAX_CHANNELS {
@@ -81,9 +89,13 @@ mod tests {
         let samples = [
         ];
 
+        let mut original_iter = samples.iter().copied();
         let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
 
-        while let Some(_) = sample_peak_iter.next() {}
+        while let Some(produced) = sample_peak_iter.next() {
+            let expected = original_iter.next().unwrap();
+            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
+        }
 
         let expected = [0.0, 0.0, 0.0, 0.0, 0.0];
         for ch in 0..MAX_CHANNELS {
