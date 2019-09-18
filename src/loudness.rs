@@ -42,7 +42,7 @@ impl Loudness {
         println!("Relative threshold: {} LKFS", relative_loudness_threshold);
 
         // This performs the calculation done in equation #7 in the ITU BS.1770 tech spec.
-        // From the collected of saved blocks that were marked as "absolutely loud",
+        // From the collection of saved blocks that were marked as "absolutely loud",
         // only those that exceed the relative loudness threshold need to be selected and averaged.
         let mut relative_averager = Stats::new();
 
