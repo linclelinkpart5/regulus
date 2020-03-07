@@ -1,4 +1,5 @@
 
+use crate::stats::Stats;
 use crate::constants::MAX_CHANNELS;
 
 const DEN_THRESHOLD: f64 = 1.0e-15;
@@ -22,32 +23,31 @@ impl Util {
         else { x }
     }
 
+    pub fn scale(sample: [f64; MAX_CHANNELS], scale: f64) -> [f64; MAX_CHANNELS] {
+        let mut scaled = [0.0f64; MAX_CHANNELS];
+        for ch in 0..MAX_CHANNELS {
+            scaled[ch] = sample[ch] * scale;
+        }
+
+        scaled
+    }
+
+    pub fn sample_sq(sample: [f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
+        let mut sample_sq = [0.0f64; MAX_CHANNELS];
+        for ch in 0..MAX_CHANNELS {
+            sample_sq[ch] = sample[ch] * sample[ch];
+        }
+        sample_sq
+    }
+
     /// Calculates the mean square of an iterable of samples.
     pub fn sample_mean_sq<I>(samples: I) -> [f64; MAX_CHANNELS]
     where
         I: IntoIterator<Item = [f64; MAX_CHANNELS]>
     {
-        let mut count = 0usize;
-        let mut summed = [0.0f64; MAX_CHANNELS];
-        let mut averaged = [0.0f64; MAX_CHANNELS];
-
-        for sample in samples {
-            // Keep track of the number of samples seen.
-            count += 1;
-
-            // For each channel, square the sample's value, and add it to the running total.
-            for ch in 0..MAX_CHANNELS {
-                summed[ch] += sample[ch] * sample[ch];
-            }
-        }
-
-        if count > 0 {
-            for ch in 0..MAX_CHANNELS {
-                averaged[ch] = summed[ch] / count as f64;
-            }
-        }
-
-        averaged
+        let mut stats = Stats::new();
+        stats.extend(samples.into_iter().map(Util::sample_sq));
+        stats.mean
     }
 
     /// Calculates the root mean square of an iterable of samples.
@@ -103,6 +103,8 @@ impl Util {
 mod tests {
     use super::*;
 
+    use crate::wave::WaveKind;
+
     #[test]
     fn util_ms_to_samples() {
         let inputs_and_expected = vec![
@@ -121,6 +123,31 @@ mod tests {
             let produced = Util::ms_to_samples(ms, sample_rate);
 
             assert_eq!(expected, produced)
+        }
+    }
+
+    #[test]
+    fn sample_root_mean_sq() {
+        const SAMPLE_RATE: usize = 100000;
+        const FREQUENCIES: [f64; MAX_CHANNELS] = [440.0, 480.0, 520.0, 560.0, 600.0];
+        const AMPLITUDES: [f64; MAX_CHANNELS] = [0.2, 0.4, 0.6, 0.8, 1.0];
+
+        let wave_kinds_and_expected = vec![
+            (WaveKind::Flat, AMPLITUDES),
+            (WaveKind::Square, AMPLITUDES),
+            (WaveKind::Sine, Util::scale(AMPLITUDES, 1.0 / 2.0f64.sqrt())),
+            // (WaveKind::Triangle, Util::scale(AMPLITUDES, 1.0 / 3.0f64.sqrt())),
+            // (WaveKind::Sawtooth, Util::scale(AMPLITUDES, 1.0 / 3.0f64.sqrt())),
+        ];
+
+        for (wave_kind, expected) in wave_kinds_and_expected {
+            let wave = wave_kind.gen(SAMPLE_RATE, FREQUENCIES, AMPLITUDES).take(SAMPLE_RATE);
+            let produced = Util::sample_root_mean_sq(wave);
+            for ch in 0..expected.len().max(produced.len()) {
+                let e = expected[ch];
+                let p = produced[ch];
+                assert_relative_eq!(e, p, epsilon=1.0e-12);
+            }
         }
     }
 }

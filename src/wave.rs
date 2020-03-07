@@ -6,6 +6,7 @@ use crate::constants::MAX_CHANNELS;
 
 #[derive(Clone, Copy)]
 pub enum WaveKind {
+    Flat,
     Sine,
     Square,
     Triangle,
@@ -13,14 +14,19 @@ pub enum WaveKind {
 }
 
 impl WaveKind {
-    pub fn val(&self, sample_index: usize, samples_per_period: usize, frequency: u32) -> f64 {
-        let x = sample_index as f64 * frequency as f64 / samples_per_period as f64;
-        match self {
-            &WaveKind::Sine => (2.0 * PI * x).sin(),
-            &WaveKind::Square => (-1.0f64).powf((2.0 * x).floor()),
-            &WaveKind::Triangle => 1.0 - 4.0 * (0.5 - (x + 0.25).fract()).abs(),
-            &WaveKind::Sawtooth => 2.0 * x.fract() - 1.0,
+    fn val(&self, sample_index: usize, samples_per_period: usize, frequency: f64, amplitude: f64) -> f64 {
+        let x = sample_index as f64 * frequency / samples_per_period as f64;
+        amplitude * match self {
+            Self::Flat => 1.0,
+            Self::Sine => (2.0 * PI * x).sin(),
+            Self::Square => (-1.0f64).powf((2.0 * x).floor()),
+            Self::Triangle => 1.0 - 4.0 * (0.5 - (x + 0.25).fract()).abs(),
+            Self::Sawtooth => 2.0 * x.fract() - 1.0,
         }
+    }
+
+    pub fn gen(self, samples_per_period: usize, frequencies: [f64; MAX_CHANNELS], amplitudes: [f64; MAX_CHANNELS]) -> WaveGen {
+        WaveGen::new(self, samples_per_period, frequencies, amplitudes)
     }
 }
 
@@ -28,16 +34,18 @@ pub struct WaveGen {
     kind: WaveKind,
     samples_per_period: usize,
     sample_index: usize,
-    frequencies: [u32; MAX_CHANNELS],
+    frequencies: [f64; MAX_CHANNELS],
+    amplitudes: [f64; MAX_CHANNELS],
 }
 
 impl WaveGen {
-    pub fn new(kind: WaveKind, samples_per_period: usize, frequencies: [u32; MAX_CHANNELS]) -> Self {
+    pub fn new(kind: WaveKind, samples_per_period: usize, frequencies: [f64; MAX_CHANNELS], amplitudes: [f64; MAX_CHANNELS]) -> Self {
         Self {
             kind,
             samples_per_period,
             sample_index: 0,
             frequencies,
+            amplitudes,
         }
     }
 }
@@ -49,7 +57,7 @@ impl Iterator for WaveGen {
         let mut o = [0.0f64; MAX_CHANNELS];
 
         for ch in 0..MAX_CHANNELS {
-            o[ch] = self.kind.val(self.sample_index, self.samples_per_period, self.frequencies[ch]);
+            o[ch] = self.kind.val(self.sample_index, self.samples_per_period, self.frequencies[ch], self.amplitudes[ch]);
         }
 
         self.sample_index = (self.sample_index + 1) % self.samples_per_period;

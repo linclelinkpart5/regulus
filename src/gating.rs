@@ -97,9 +97,10 @@ mod tests {
 
     #[test]
     fn gated_power_iter() {
-        const FREQUENCIES: [u32; MAX_CHANNELS] = [440, 480, 520, 560, 600];
+        const FREQUENCIES: [f64; MAX_CHANNELS] = [440.0, 480.0, 520.0, 560.0, 600.0];
+        const AMPLITUDES: [f64; MAX_CHANNELS] = [1.0, 1.0, 1.0, 1.0, 1.0];
 
-        let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES);
+        let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES, AMPLITUDES);
         let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
@@ -131,7 +132,7 @@ mod tests {
             }
         }
 
-        let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES);
+        let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES, AMPLITUDES);
         let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
@@ -155,7 +156,7 @@ mod tests {
             }
         }
 
-        let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES);
+        let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES, AMPLITUDES);
         let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [
@@ -187,7 +188,7 @@ mod tests {
             }
         }
 
-        let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES);
+        let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES, AMPLITUDES);
         let mut gpi = GatedPowerIter::new(sample_iter, 48000);
 
         let expected_results = [

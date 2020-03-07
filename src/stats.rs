@@ -15,19 +15,28 @@ impl Stats {
         }
     }
 
-    pub fn add(&mut self, element: &[f64; MAX_CHANNELS]) {
+    pub fn add(&mut self, sample: &[f64; MAX_CHANNELS]) {
         if self.count == 0 {
-            // If no existing elements have been analyzed, just store the new element.
-            self.mean = *element;
+            // If no existing samples have been analyzed, just store the new sample.
+            self.mean = *sample;
             self.count = 1;
         }
         else {
             // Calculate the incremental average.
             for ch in 0..MAX_CHANNELS {
-                self.mean[ch] = (self.count as f64 * self.mean[ch] + element[ch]) / (self.count + 1) as f64;
+                self.mean[ch] = (self.count as f64 * self.mean[ch] + sample[ch]) / (self.count + 1) as f64;
             }
 
             self.count += 1;
+        }
+    }
+
+    pub fn extend<I>(&mut self, samples: I)
+    where
+        I: IntoIterator<Item = [f64; MAX_CHANNELS]>
+    {
+        for sample in samples {
+            self.add(&sample);
         }
     }
 
