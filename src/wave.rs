@@ -15,13 +15,17 @@ pub enum WaveKind {
 
 impl WaveKind {
     fn val(&self, sample_index: usize, samples_per_period: usize, frequency: f64, amplitude: f64) -> f64 {
-        let x = sample_index as f64 * frequency / samples_per_period as f64;
-        amplitude * match self {
-            Self::Flat => 1.0,
-            Self::Sine => (2.0 * PI * x).sin(),
-            Self::Square => (-1.0f64).powf((2.0 * x).floor()),
-            Self::Triangle => 1.0 - 4.0 * (0.5 - (x + 0.25).fract()).abs(),
-            Self::Sawtooth => 2.0 * x.fract() - 1.0,
+        let ft = sample_index as f64 * frequency / samples_per_period as f64;
+        let a = amplitude;
+        match self {
+            Self::Flat => a,
+            Self::Sine => a * (2.0 * PI * ft).sin(),
+            // Self::Square => (-1.0f64).powf((2.0 * ft).floor()),
+            Self::Square => if ft.fract() < 0.5 { a } else { -a },
+            // Self::Triangle => 1.0 - 4.0 * (0.5 - (ft + 0.25).fract()).abs(),
+            Self::Triangle => (a * (2.0 * ft.fract() - 1.0)).abs(),
+            // Self::Sawtooth => 2.0 * ft.fract() - 1.0,
+            Self::Sawtooth => a * (2.0 * ft.fract() - 1.0),
         }
     }
 
