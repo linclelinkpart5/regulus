@@ -4,7 +4,6 @@ pub mod biquad;
 pub mod constants;
 pub mod stats;
 pub mod util;
-pub mod filter;
 pub mod gating;
 pub mod loudness;
 pub mod peak;
@@ -44,7 +43,7 @@ pub mod peak;
 
 #[cfg(test)]
 mod tests {
-    use super::filter::FilteredSampleIter;
+    use super::biquad::FilteredSamples;
     use super::gating::GatedPowerIter;
     use super::loudness::Loudness;
 
@@ -57,11 +56,11 @@ mod tests {
         // the indicated loudness will equal -3.01 LKFS.
         let sample_rate: u32 = 48000;
         let raw_signal = SineGen::new(sample_rate, 997.0, 1.0).map(|x| [x, 0.0, 0.0, 0.0, 0.0]).take(sample_rate as usize * 10);
-        let filtered_signal = FilteredSampleIter::new(raw_signal, sample_rate);
+        let filtered_signal = FilteredSamples::new(raw_signal, sample_rate);
         let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
         let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter, [1.0, 1.0, 1.0, 1.0, 1.0]);
 
         // assert_abs_diff_eq!(-3.01, loudness);
-        assert_abs_diff_eq!(-3.010279921396327, loudness);
+        assert_abs_diff_eq!(-3.010279921396325, loudness);
     }
 }

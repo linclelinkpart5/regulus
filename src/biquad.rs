@@ -111,7 +111,6 @@ impl Filter {
 /// The second pass is a simple high pass filter.
 #[derive(Copy, Clone, Debug)]
 struct FilterChain {
-    sample_rate: u32,
     pass_a: Filter,
     pass_b: Filter,
 }
@@ -121,7 +120,7 @@ impl FilterChain {
         let pass_a = Filter::new(Kind::A, sample_rate);
         let pass_b = Filter::new(Kind::B, sample_rate);
 
-        Self { sample_rate, pass_a, pass_b, }
+        Self { pass_a, pass_b, }
     }
 
     pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
@@ -161,5 +160,119 @@ where
         let filtered_sample = self.filter_chain.apply(&raw_sample);
 
         Some(filtered_sample)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn params_new() {
+        let expected = Params {
+            a1: -1.6906592931824103,
+            a2: 0.7324807742158501,
+            b0: 1.5351248595869702,
+            b1: -2.6916961894063807,
+            b2: 1.19839281085285,
+        };
+        let produced = Params::new(Kind::A, 48000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+
+        let expected = Params {
+            a1: -1.6636551132560204,
+            a2: 0.7125954280732254,
+            b0: 1.5308412300503478,
+            b1: -2.6509799951547297,
+            b2: 1.169079079921587,
+        };
+        let produced = Params::new(Kind::A, 44100);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+
+        let expected = Params {
+            a1: -0.2933807824149212,
+            a2: 0.18687510604540827,
+            b0: 1.3216235689299776,
+            b1: -0.7262554913156911,
+            b2: 0.2981262460162007,
+        };
+        let produced = Params::new(Kind::A, 8000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+
+        let expected = Params {
+            a1: -1.9222022306074886,
+            a2: 0.925117735116826,
+            b0: 1.5722272150912788,
+            b1: -3.0472830515615508,
+            b2: 1.4779713409796091,
+        };
+        let produced = Params::new(Kind::A, 192000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+
+        let expected = Params {
+            a1: -1.99004745483398,
+            a2:  0.99007225036621,
+            b0:  1.00000000000000,
+            b1: -2.00000000000000,
+            b2:  1.00000000000000,
+        };
+        let produced = Params::new(Kind::B, 48000);
+
+        println!("{:?}, {:?}", expected, produced);
+        assert_abs_diff_eq!(expected, produced);
+    }
+
+    #[test]
+    fn filter_new() {
+        let filter = Filter::new(Kind::A, 48000);
+
+        assert_abs_diff_eq!(
+            filter.ps,
+            Params {
+                a1: -1.6906592931824103,
+                a2: 0.7324807742158501,
+                b0: 1.5351248595869702,
+                b1: -2.6916961894063807,
+                b2: 1.19839281085285,
+            },
+        );
+        assert_eq!(filter.s1, [0.0f64; MAX_CHANNELS]);
+        assert_eq!(filter.s2, [0.0f64; MAX_CHANNELS]);
+    }
+
+    #[test]
+    fn filter_apply() {
+        let mut filter = Filter::new(Kind::A, 48000);
+
+        let expected_rows = vec![
+            [-1.5351248595869702, -0.7675624297934851, 0.0, 0.7675624297934851, 1.5351248595869702],
+            [-1.4388017802366435, -0.7194008901183218, 0.0, 0.7194008901183218, 1.4388017802366435],
+            [-1.3498956361696552, -0.6749478180848276, 0.0, 0.6749478180848276, 1.3498956361696552],
+            [-1.2701404412191692, -0.6350702206095846, 0.0, 0.6350702206095846, 1.2701404412191692],
+            [-1.2004236209352888, -0.6002118104676444, 0.0, 0.6002118104676444, 1.2004236209352888],
+            [-1.1409753777762859, -0.5704876888881429, 0.0, 0.5704876888881429, 1.1409753777762859],
+            [-1.0915348835135539, -0.5457674417567769, 0.0, 0.5457674417567769, 1.0915348835135539],
+            [-1.0514925476036132, -0.5257462738018066, 0.0, 0.5257462738018066, 1.0514925476036132],
+        ];
+
+        let input = [-1.0, -0.5, 0.0, 0.5, 1.0];
+
+        for expected in expected_rows {
+            let produced = filter.apply(&input);
+
+            println!("{:?}", expected);
+            println!("{:?}", produced);
+            for (e, p) in expected.iter().zip(&produced) {
+                assert_abs_diff_eq!(e, p);
+            }
+        }
     }
 }
