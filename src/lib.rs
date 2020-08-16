@@ -1,5 +1,6 @@
 #[cfg(test)] #[macro_use] extern crate approx;
 
+pub mod biquad;
 pub mod constants;
 pub mod stats;
 pub mod util;
