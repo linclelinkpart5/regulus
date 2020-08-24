@@ -1,4 +1,4 @@
-#[cfg(test)] #[macro_use] extern crate approx;
+// #[cfg(test)] #[macro_use] extern crate approx;
 
 pub mod biquad;
 pub mod constants;
@@ -7,7 +7,6 @@ pub mod util;
 pub mod gating;
 pub mod loudness;
 pub mod peak;
-#[cfg(test)] pub mod wave;
 
 // #[derive(Clone, Copy, Debug)]
 // enum NormKind {
@@ -47,7 +46,9 @@ mod tests {
     use super::gating::GatedPowerIter;
     use super::loudness::Loudness;
 
-    use super::wave::SineGen;
+    use sample::signal::Signal;
+
+    use approx::assert_abs_diff_eq;
 
     #[test]
     fn nominal_frequency_reading() {
@@ -55,12 +56,21 @@ mod tests {
         // If a 0 dB FS, 997 Hz sine wave is applied to the left, center, or right channel input,
         // the indicated loudness will equal -3.01 LKFS.
         let sample_rate: u32 = 48000;
-        let raw_signal = SineGen::new(sample_rate, 997.0, 1.0).map(|x| [x, 0.0, 0.0, 0.0, 0.0]).take(sample_rate as usize * 10);
+
+        let mut mono_raw_signal = sample::signal::rate(48000.0).const_hz(997.0).sine();
+        let raw_signal =
+            std::iter::from_fn(move || {
+                let x = mono_raw_signal.next()[0];
+                Some([x, 0.0, 0.0, 0.0, 0.0])
+            })
+            .take(sample_rate as usize * 10)
+        ;
+
         let filtered_signal = FilteredSamples::new(raw_signal, sample_rate);
         let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
         let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter, [1.0, 1.0, 1.0, 1.0, 1.0]);
 
         // assert_abs_diff_eq!(-3.01, loudness);
-        assert_abs_diff_eq!(-3.010279921396325, loudness);
+        assert_abs_diff_eq!(loudness, -3.0102799213963327);
     }
 }

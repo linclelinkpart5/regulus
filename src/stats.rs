@@ -64,6 +64,8 @@ impl Stats {
 mod tests {
     use super::*;
 
+    use approx::assert_abs_diff_eq;
+
     fn validate(expected_mean: [f64; MAX_CHANNELS], expected_count: usize, produced: Stats) {
         let produced_mean = produced.mean;
         let produced_count = produced.count;

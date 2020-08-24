@@ -35,8 +35,14 @@ version = "0.1.0"
 dependencies = [
  "approx 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "circular-queue 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sample 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "strum 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "sample"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "strum"
@@ -53,5 +59,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum autocfg 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "22130e92352b948e7e82a49cdb0aa94f2211761117f29e052dd397c1ac33542b"
 "checksum circular-queue 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f078b2d527bd6626dbe959e6b52c2ed7a8b30bc3f780319b325a14760df0ddf1"
 "checksum num-traits 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "6ba9a427cfca2be13aa6f6403b0b7e7368fe982bfa16fccc450ce74c46cd9b32"
+"checksum sample 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "36ba94921dc69eb59cf881cda681c5556026835c83ca5a7663947557fafe7402"
 "checksum strum 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e5d1c33039533f051704951680f1adfd468fd37ac46816ded0d9ee068e60f05f"
 "checksum version_check 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)" = "078775d0255232fb988e6fccf26ddc9d1ac274299aaedcedce21c6f72cc533ce"

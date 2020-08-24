@@ -217,6 +217,8 @@ where
 mod tests {
     use super::*;
 
+    use approx::assert_abs_diff_eq;
+
     #[test]
     fn params_new() {
         let expected = Coefficients {

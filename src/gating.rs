@@ -92,9 +92,6 @@ where
 mod tests {
     use super::*;
 
-    use crate::wave::WaveKind;
-    use crate::wave::WaveGen;
-
     // #[test]
     // fn gated_power_iter() {
     //     const FREQUENCIES: [f64; MAX_CHANNELS] = [440.0, 480.0, 520.0, 560.0, 600.0];
