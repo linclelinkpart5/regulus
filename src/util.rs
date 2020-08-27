@@ -12,10 +12,8 @@ impl Util {
     }
 
     pub fn lufs_hist(count: u64, sum: f64, reference: f64) -> f64 {
-        match count == 0 {
-            false => Util::lufs(sum / count as f64),
-            true => reference,
-        }
+        if count == 0 { reference }
+        else { Util::lufs(sum / count as f64) }
     }
 
     pub fn den(x: f64) -> f64 {
@@ -23,7 +21,7 @@ impl Util {
         else { x }
     }
 
-    pub fn scale(sample: [f64; MAX_CHANNELS], scale: f64) -> [f64; MAX_CHANNELS] {
+    pub fn scale(sample: &[f64; MAX_CHANNELS], scale: f64) -> [f64; MAX_CHANNELS] {
         let mut scaled = [0.0f64; MAX_CHANNELS];
         for ch in 0..MAX_CHANNELS {
             scaled[ch] = sample[ch] * scale;
@@ -32,7 +30,7 @@ impl Util {
         scaled
     }
 
-    pub fn sample_sq(sample: [f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
+    pub fn sample_sq(sample: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
         let mut sample_sq = [0.0f64; MAX_CHANNELS];
         for ch in 0..MAX_CHANNELS {
             sample_sq[ch] = sample[ch] * sample[ch];
@@ -41,21 +39,21 @@ impl Util {
     }
 
     /// Calculates the mean square of an iterable of samples.
-    pub fn sample_mean_sq<I>(samples: I) -> [f64; MAX_CHANNELS]
+    pub fn mean_sq<I>(samples: I) -> [f64; MAX_CHANNELS]
     where
         I: IntoIterator<Item = [f64; MAX_CHANNELS]>
     {
         let mut stats = Stats::new();
-        stats.extend(samples.into_iter().map(Util::sample_sq));
+        stats.extend(samples.into_iter().map(|s| Util::sample_sq(&s)));
         stats.mean
     }
 
     /// Calculates the root mean square of an iterable of samples.
-    pub fn sample_root_mean_sq<I>(samples: I) -> [f64; MAX_CHANNELS]
+    pub fn root_mean_sq<I>(samples: I) -> [f64; MAX_CHANNELS]
     where
         I: IntoIterator<Item = [f64; MAX_CHANNELS]>
     {
-        let mean_sqs = Self::sample_mean_sq(samples);
+        let mean_sqs = Self::mean_sq(samples);
         let mut root_mean_sqs = [0.0f64; MAX_CHANNELS];
         for ch in 0..MAX_CHANNELS {
             root_mean_sqs[ch] = mean_sqs[ch].sqrt();
@@ -103,6 +101,10 @@ impl Util {
 mod tests {
     use super::*;
 
+    use sample::Signal;
+
+    use approx::assert_relative_eq;
+
     #[test]
     fn util_ms_to_samples() {
         let inputs_and_expected = vec![
@@ -124,28 +126,67 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn sample_root_mean_sq() {
-    //     const SAMPLE_RATE: usize = 100000;
-    //     const FREQUENCIES: [f64; MAX_CHANNELS] = [440.0, 480.0, 520.0, 560.0, 600.0];
-    //     const AMPLITUDES: [f64; MAX_CHANNELS] = [0.2, 0.4, 0.6, 0.8, 1.0];
+    #[test]
+    fn root_mean_sq() {
+        const SAMPLE_RATE: usize = 100000;
+        const AMPLITUDES: [f64; MAX_CHANNELS] = [0.2, 0.4, 0.6, 0.8, 1.0];
+        const EPSILON: f64 = 1e-8;
 
-    //     let wave_kinds_and_expected = vec![
-    //         (WaveKind::Flat, AMPLITUDES),
-    //         (WaveKind::Square, AMPLITUDES),
-    //         (WaveKind::Sine, Util::scale(AMPLITUDES, 1.0 / 2.0f64.sqrt())),
-    //         // (WaveKind::Triangle, Util::scale(AMPLITUDES, 1.0 / 3.0f64.sqrt())),
-    //         // (WaveKind::Sawtooth, Util::scale(AMPLITUDES, 1.0 / 3.0f64.sqrt())),
-    //     ];
+        // Full flat signal.
+        let signal =
+            std::iter::repeat(AMPLITUDES)
+            .take(SAMPLE_RATE)
+        ;
 
-    //     for (wave_kind, expected) in wave_kinds_and_expected {
-    //         let wave = wave_kind.gen(SAMPLE_RATE, FREQUENCIES, AMPLITUDES).take(SAMPLE_RATE);
-    //         let produced = Util::sample_root_mean_sq(wave);
-    //         for ch in 0..expected.len().max(produced.len()) {
-    //             let e = expected[ch];
-    //             let p = produced[ch];
-    //             assert_relative_eq!(e, p, epsilon=1.0e-12);
-    //         }
-    //     }
-    // }
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES;
+
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = produced[ch];
+            assert_relative_eq!(e, p, epsilon=EPSILON);
+        }
+
+        // Sine wave.
+        let mut mono_signal = sample::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).sine();
+        let signal =
+            std::iter::from_fn(move || {
+                let mut s = AMPLITUDES;
+                let x = mono_signal.next()[0];
+                s.iter_mut().for_each(|e| *e *= x);
+                Some(s)
+            })
+            .take(SAMPLE_RATE)
+        ;
+
+        let produced = Util::root_mean_sq(signal);
+        let expected = Util::scale(&AMPLITUDES, 1.0 / 2.0f64.sqrt());
+
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = produced[ch];
+            assert_relative_eq!(e, p, epsilon=EPSILON);
+        }
+
+        // Square wave.
+        let mut mono_signal = sample::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).square();
+        let signal =
+            std::iter::from_fn(move || {
+                let mut s = AMPLITUDES;
+                let x = mono_signal.next()[0];
+                s.iter_mut().for_each(|e| *e *= x);
+                Some(s)
+            })
+            .take(SAMPLE_RATE)
+        ;
+
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES;
+
+        for ch in 0..MAX_CHANNELS {
+            let e = expected[ch];
+            let p = produced[ch];
+            assert_relative_eq!(e, p, epsilon=EPSILON);
+        }
+    }
 }
