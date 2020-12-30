@@ -6,11 +6,51 @@ use crate::constants::MAX_CHANNELS;
 
 #[derive(Copy, Clone, Debug)]
 enum Kind {
-    A, B,
+    Shelving, HighPass,
+}
+
+impl Kind {
+    fn coefficients(&self, sample_rate: u32) -> Coefficients {
+        let (f0, q) =
+            match self {
+                Self::Shelving => (1681.974450955533, 0.7071752369554196),
+                Self::HighPass => (38.13547087602444, 0.5003270373238773),
+            }
+        ;
+
+        let k = (PI * f0 / sample_rate as f64).tan();
+        let k_by_q = k / q;
+        let k_sq = k * k;
+
+        let a0 = 1.0 + k_by_q + k_sq;
+        let a1 = 2.0 * (k_sq - 1.0) / a0;
+        let a2 = (1.0 - k_by_q + k_sq) / a0;
+
+        let (b0, b1, b2) =
+            match self {
+                Self::Shelving => {
+                    let height = 3.999843853973347;
+
+                    let vh = 10.0f64.powf(height / 20.0);
+                    let vb = vh.powf(0.4996667741545416);
+
+                    let b0 = (vh + vb * k_by_q + k_sq) / a0;
+                    let b1 = 2.0 * (k_sq - vh) / a0;
+                    let b2 = (vh - vb * k_by_q + k_sq) / a0;
+
+                    (b0, b1, b2)
+                },
+                Self::HighPass => (1.0, -2.0, 1.0),
+            }
+        ;
+
+        Coefficients { a1, a2, b0, b1, b2, }
+    }
 }
 
 /// Coefficients for a biquad digital filter at a particular sample rate.
-/// It is assumed that the `a0` coefficient is always normalized to 1.0, and thus not included here.
+/// It is assumed that the `a0` coefficient is always normalized to 1.0,
+/// and thus not included here.
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Coefficients {
     // Numerator coefficients.
@@ -21,44 +61,6 @@ struct Coefficients {
     // Denominator coefficients, a0 is implied/assumed to be normalized to 1.0.
     a1: f64,
     a2: f64,
-}
-
-impl Coefficients {
-    // https://hydrogenaud.io/index.php?topic=76394.0
-    pub fn new(kind: Kind, sample_rate: u32) -> Self {
-        let (f0, q) =
-            match kind {
-                Kind::A => (1681.974450955533, 0.7071752369554196),
-                Kind::B => (38.13547087602444, 0.5003270373238773),
-            }
-        ;
-
-        let k = (PI * f0 / sample_rate as f64).tan();
-
-        let a0 = 1.0 + k / q + k * k;
-        let a1 = 2.0 * (k * k - 1.0) / a0;
-        let a2 = (1.0 - k / q + k * k) / a0;
-
-        let (b0, b1, b2) =
-            match kind {
-                Kind::A => {
-                    let height = 3.999843853973347;
-
-                    let vh = 10.0f64.powf(height / 20.0);
-                    let vb = vh.powf(0.4996667741545416);
-
-                    let b0 = (vh + vb * k / q + k * k) / a0;
-                    let b1 = 2.0 * (k * k - vh) / a0;
-                    let b2 = (vh - vb * k / q + k * k) / a0;
-
-                    (b0, b1, b2)
-                },
-                Kind::B => (1.0, -2.0, 1.0),
-            }
-        ;
-
-        Self { a1, a2, b0, b1, b2, }
-    }
 }
 
 #[cfg(test)]
@@ -78,64 +80,24 @@ impl AbsDiffEq for Coefficients {
     }
 }
 
-/// Filter parameters, which determine a particular frequency response for a
-/// given sampling rate.
-struct Parameters {
-    // Omega, equal to `tan(PI * fc / fs)`.
-    k: f64,
-
-    /// Q factor, used as a quality factor in biquad filters.
-    q: f64,
-
-    // Band-pass gain (@ target frequency `fc`).
-    vb: f64,
-
-    // Low-pass gain (@ DC).
-    vl: f64,
-
-    // High-pass gain (@ Nyquist frequency).
-    vh: f64,
-}
-
-impl Parameters {
-    fn from_coefficients(co: &Coefficients) -> Self {
-        let x11 = co.a1 - 2.0;
-        let x12 = co.a1;
-        let x1 = -co.a1 - 2.0;
-
-        let x21 = co.a2 - 1.0;
-        let x22 = co.a2 + 1.0;
-        let x2 = -co.a2 + 1.0;
-
-        let dx = (x22 * x11) - (x12 * x21);
-        let k_sq = ((x22 * x1) - (x12 * x2))/dx;
-        let k_by_q = ((x11 * x2) - (x21 * x1))/dx;
-        let a0 = 1.0 + k_by_q + k_sq;
-
-        let k = k_sq.sqrt();
-        let q = k / k_by_q;
-        let vb = 0.50 * a0 * (co.b0 - co.b2) / k_by_q;
-        let vl = 0.25 * a0 * (co.b0 + co.b1 + co.b2) / k_sq;
-        let vh = 0.25 * a0 * (co.b0 - co.b1 + co.b2);
-
-        Self { k, q, vb, vl, vh, }
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
-struct Filter {
+struct FilterPass {
     coeff: Coefficients,
-    s1: [f64; MAX_CHANNELS],
-    s2: [f64; MAX_CHANNELS],
+    m1: [f64; MAX_CHANNELS],
+    m2: [f64; MAX_CHANNELS],
 }
 
-impl Filter {
-    fn new(kind: Kind, sample_rate: u32) -> Self {
+impl FilterPass {
+    fn from_coeff(coeff: Coefficients) -> Self {
         Self {
-            coeff: Coefficients::new(kind, sample_rate),
-            s1: [0.0; MAX_CHANNELS],
-            s2: [0.0; MAX_CHANNELS],
+            coeff,
+            m1: [0.0; MAX_CHANNELS],
+            m2: [0.0; MAX_CHANNELS],
         }
+    }
+
+    fn from_kind(kind: Kind, sample_rate: u32) -> Self {
+        Self::from_coeff(kind.coefficients(sample_rate))
     }
 
     pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
@@ -143,10 +105,11 @@ impl Filter {
 
         // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
         // https://github.com/korken89/biquad-rs/blob/master/src/lib.rs
+        let co = &self.coeff;
         for ch in 0..MAX_CHANNELS {
-            let out = self.s1[ch] + self.coeff.b0 * input[ch];
-            self.s1[ch] = self.s2[ch] + self.coeff.b1 * input[ch] - self.coeff.a1 * out;
-            self.s2[ch] = self.coeff.b2 * input[ch] - self.coeff.a2 * out;
+            let out = self.m1[ch] + co.b0 * input[ch];
+            self.m1[ch] = self.m2[ch] + co.b1 * input[ch] - co.a1 * out;
+            self.m2[ch] = co.b2 * input[ch] - co.a2 * out;
 
             output[ch] = out;
         }
@@ -160,15 +123,15 @@ impl Filter {
 /// effects of the listener's head, assumed to be roughly spherical. The second
 /// pass is a simple high pass filter.
 #[derive(Copy, Clone, Debug)]
-struct FilterChain {
-    pass_a: Filter,
-    pass_b: Filter,
+struct Filter {
+    pass_a: FilterPass,
+    pass_b: FilterPass,
 }
 
-impl FilterChain {
+impl Filter {
     pub fn new(sample_rate: u32) -> Self {
-        let pass_a = Filter::new(Kind::A, sample_rate);
-        let pass_b = Filter::new(Kind::B, sample_rate);
+        let pass_a = FilterPass::from_kind(Kind::Shelving, sample_rate);
+        let pass_b = FilterPass::from_kind(Kind::HighPass, sample_rate);
 
         Self { pass_a, pass_b, }
     }
@@ -178,24 +141,24 @@ impl FilterChain {
     }
 }
 
+/// Iterator that peforms the K-weighted filtering step on each sample in an
+/// iterable.
 pub struct FilteredSamples<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
-    sample_iter: I,
-    filter_chain: FilterChain,
+    samples: I,
+    filter: Filter,
 }
 
 impl<I> FilteredSamples<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
-    pub fn new(sample_iter: I, sample_rate: u32) -> Self {
-        let filter_chain = FilterChain::new(sample_rate);
-        Self {
-            sample_iter,
-            filter_chain,
-        }
+    pub fn new(samples: I, sample_rate: u32) -> Self {
+        let filter = Filter::new(sample_rate);
+
+        Self { samples, filter }
     }
 }
 
@@ -206,8 +169,8 @@ where
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let raw_sample = self.sample_iter.next()?;
-        let filtered_sample = self.filter_chain.apply(&raw_sample);
+        let raw_sample = self.samples.next()?;
+        let filtered_sample = self.filter.apply(&raw_sample);
 
         Some(filtered_sample)
     }
@@ -220,7 +183,7 @@ mod tests {
     use approx::assert_abs_diff_eq;
 
     #[test]
-    fn params_new() {
+    fn coefficients() {
         let expected = Coefficients {
             a1: -1.6906592931824103,
             a2: 0.7324807742158501,
@@ -228,9 +191,8 @@ mod tests {
             b1: -2.6916961894063807,
             b2: 1.19839281085285,
         };
-        let produced = Coefficients::new(Kind::A, 48000);
+        let produced = Kind::Shelving.coefficients(48000);
 
-        println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
 
         let expected = Coefficients {
@@ -240,9 +202,8 @@ mod tests {
             b1: -2.6509799951547297,
             b2: 1.169079079921587,
         };
-        let produced = Coefficients::new(Kind::A, 44100);
+        let produced = Kind::Shelving.coefficients(44100);
 
-        println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
 
         let expected = Coefficients {
@@ -252,9 +213,8 @@ mod tests {
             b1: -0.7262554913156911,
             b2: 0.2981262460162007,
         };
-        let produced = Coefficients::new(Kind::A, 8000);
+        let produced = Kind::Shelving.coefficients(8000);
 
-        println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
 
         let expected = Coefficients {
@@ -264,9 +224,8 @@ mod tests {
             b1: -3.0472830515615508,
             b2: 1.4779713409796091,
         };
-        let produced = Coefficients::new(Kind::A, 192000);
+        let produced = Kind::Shelving.coefficients(192000);
 
-        println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
 
         let expected = Coefficients {
@@ -276,33 +235,14 @@ mod tests {
             b1: -2.00000000000000,
             b2:  1.00000000000000,
         };
-        let produced = Coefficients::new(Kind::B, 48000);
+        let produced = Kind::HighPass.coefficients(48000);
 
-        println!("{:?}, {:?}", expected, produced);
         assert_abs_diff_eq!(expected, produced);
     }
 
     #[test]
-    fn filter_new() {
-        let filter = Filter::new(Kind::A, 48000);
-
-        assert_abs_diff_eq!(
-            filter.coeff,
-            Coefficients {
-                a1: -1.6906592931824103,
-                a2: 0.7324807742158501,
-                b0: 1.5351248595869702,
-                b1: -2.6916961894063807,
-                b2: 1.19839281085285,
-            },
-        );
-        assert_eq!(filter.s1, [0.0f64; MAX_CHANNELS]);
-        assert_eq!(filter.s2, [0.0f64; MAX_CHANNELS]);
-    }
-
-    #[test]
-    fn filter_apply() {
-        let mut filter = Filter::new(Kind::A, 48000);
+    fn filter_pass_apply() {
+        let mut filter_pass = FilterPass::from_kind(Kind::Shelving, 48000);
 
         let expected_rows = vec![
             [-1.5351248595869702, -0.7675624297934851, 0.0, 0.7675624297934851, 1.5351248595869702],
@@ -318,13 +258,12 @@ mod tests {
         let input = [-1.0, -0.5, 0.0, 0.5, 1.0];
 
         for expected in expected_rows {
-            let produced = filter.apply(&input);
+            let produced = filter_pass.apply(&input);
 
-            println!("{:?}", expected);
-            println!("{:?}", produced);
             for (e, p) in expected.iter().zip(&produced) {
                 assert_abs_diff_eq!(e, p);
             }
         }
     }
 }
+

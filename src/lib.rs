@@ -1,7 +1,7 @@
 // #[cfg(test)] #[macro_use] extern crate approx;
 
-pub mod biquad;
 pub mod constants;
+pub mod filter;
 pub mod stats;
 pub mod util;
 pub mod gating;
@@ -10,7 +10,7 @@ pub mod peak;
 
 pub use constants::MAX_CHANNELS;
 
-pub use biquad::FilteredSamples;
+pub use filter::FilteredSamples;
 pub use gating::GatedPowerIter;
 pub use loudness::Loudness;
 
@@ -48,9 +48,7 @@ pub use loudness::Loudness;
 
 #[cfg(test)]
 mod tests {
-    use super::biquad::FilteredSamples;
-    use super::gating::GatedPowerIter;
-    use super::loudness::Loudness;
+    use super::*;
 
     use sample::signal::Signal;
 
