@@ -1,6 +1,6 @@
 
 use crate::stats::Stats;
-use crate::constants::MAX_CHANNELS;
+use crate::constants::{MAX_CHANNELS, CHANNEL_G_WEIGHTS};
 
 const DEN_THRESHOLD: f64 = 1.0e-15;
 
@@ -70,12 +70,13 @@ impl Util {
         (num / 1000) + if num % 1000 >= 500 { 1 } else { 0 }
     }
 
-    pub fn block_loudness(channel_powers: &[f64; MAX_CHANNELS], channel_weights: &[f64; MAX_CHANNELS]) -> f64 {
+    // pub fn block_loudness(channel_powers: &[f64; MAX_CHANNELS], channel_weights: &[f64; MAX_CHANNELS]) -> f64 {
+    pub fn block_loudness(channel_powers: &[f64; MAX_CHANNELS]) -> f64 {
         // This performs the calculation done in equation #4 in the ITU BS.1770 tech spec.
         // Weight the power for each channel according to the channel weights.
         let mut weighted_channel_powers = [0.0; MAX_CHANNELS];
         for ch in 0..MAX_CHANNELS {
-            weighted_channel_powers[ch] = channel_powers[ch] * channel_weights[ch];
+            weighted_channel_powers[ch] = channel_powers[ch] * CHANNEL_G_WEIGHTS[ch];
         }
 
         // Calculate the loudness of this block from the total weighted channel power.

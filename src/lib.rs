@@ -8,6 +8,12 @@ pub mod gating;
 pub mod loudness;
 pub mod peak;
 
+pub use constants::MAX_CHANNELS;
+
+pub use biquad::FilteredSamples;
+pub use gating::GatedPowerIter;
+pub use loudness::Loudness;
+
 // #[derive(Clone, Copy, Debug)]
 // enum NormKind {
 //     ReplayGain,
@@ -68,7 +74,7 @@ mod tests {
 
         let filtered_signal = FilteredSamples::new(raw_signal, sample_rate);
         let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
-        let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter, [1.0, 1.0, 1.0, 1.0, 1.0]);
+        let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter);
 
         // assert_abs_diff_eq!(-3.01, loudness);
         assert_abs_diff_eq!(loudness, -3.0102799213963327);

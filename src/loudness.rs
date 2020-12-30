@@ -8,7 +8,7 @@ const ABSOLUTE_LOUDNESS_THRESHOLD: f64 = -70.0;
 pub struct Loudness;
 
 impl Loudness {
-    pub fn from_gated_channel_powers<I>(gated_channel_powers_iter: I, channel_weights: [f64; MAX_CHANNELS]) -> f64
+    pub fn from_gated_channel_powers<I>(gated_channel_powers_iter: I) -> f64
     where
         I: IntoIterator<Item = [f64; MAX_CHANNELS]>
     {
@@ -17,7 +17,7 @@ impl Loudness {
 
         let mut num_gates: usize = 0;
         for (j, channel_powers) in gated_channel_powers_iter.into_iter().enumerate() {
-            let block_loudness = Util::block_loudness(&channel_powers, &channel_weights);
+            let block_loudness = Util::block_loudness(&channel_powers);
 
             // If the block loudness is greater than the absolute loudness threshold, save the channel powers.
             if block_loudness > ABSOLUTE_LOUDNESS_THRESHOLD {
@@ -33,7 +33,7 @@ impl Loudness {
         // This performs the calculation done in equation #5 in the ITU BS.1770 tech spec.
         // This is the loudness of the average of the per-channel power of blocks that were marked as "loud"
         // (i.e. blocks with loudness above the absolute loudness threshold) during the initial pass.
-        let absolute_loudness = Util::block_loudness(&averager.mean, &channel_weights);
+        let absolute_loudness = Util::block_loudness(&averager.mean);
         println!("Absolute loudness: {} LKFS", absolute_loudness);
 
         // This performs the calculation done in equation #6 in the ITU BS.1770 tech spec.
@@ -54,7 +54,7 @@ impl Loudness {
             }
         }
 
-        let relative_loudness = Util::block_loudness(&relative_averager.mean, &channel_weights);
+        let relative_loudness = Util::block_loudness(&relative_averager.mean);
         println!("Relative loudness: {} LKFS", relative_loudness);
 
         relative_loudness
