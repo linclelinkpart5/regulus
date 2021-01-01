@@ -155,10 +155,13 @@ impl<I> FilteredSamples<I>
 where
     I: Iterator<Item = [f64; MAX_CHANNELS]>
 {
-    pub fn new(samples: I, sample_rate: u32) -> Self {
+    pub fn new<II>(samples: II, sample_rate: u32) -> Self
+    where
+        II: IntoIterator<IntoIter = I, Item = I::Item>,
+    {
         let filter = Filter::new(sample_rate);
 
-        Self { samples, filter }
+        Self { samples: samples.into_iter(), filter }
     }
 }
 
@@ -174,11 +177,29 @@ where
 
         Some(filtered_sample)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.samples.size_hint()
+    }
+}
+
+impl<I> ExactSizeIterator for FilteredSamples<I>
+where
+    I: Iterator<Item = [f64; MAX_CHANNELS]> + ExactSizeIterator
+{
+    fn len(&self) -> usize {
+        self.samples.len()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::io::Cursor;
+    use std::process::Command;
+
+    use byteorder::{LittleEndian, ReadBytesExt};
 
     use approx::assert_abs_diff_eq;
 
@@ -290,6 +311,92 @@ mod tests {
                 assert_abs_diff_eq!(e, p);
             }
         }
+    }
+
+    fn sox_ref_sine_cmd() -> Command {
+        let mut cmd = Command::new("sox");
+        cmd
+            .arg("--no-dither")
+            .arg("--null")
+            .arg("--rate").arg("48000")
+            .arg("--endian").arg("little")
+            .arg("--channels").arg("1")
+            .arg("--type").arg("f32")
+            .arg("-")
+            .arg("synth").arg("3").arg("sine").arg("997");
+
+        cmd
+    }
+
+    fn sox_ref_sine_filtered_cmd() -> Command {
+        // biquad 1.53512485958697 -2.69169618940638 1.19839281085285 1.0 -1.69065929318241 0.73248077421585
+        // biquad 1.0 -2.0 1.0 1.0 -1.99004745483398 0.99007225036621
+        let mut cmd = sox_ref_sine_cmd();
+        cmd
+            .arg("biquad")
+                .arg("1.53512485958697")
+                .arg("-2.69169618940638")
+                .arg("1.19839281085285")
+                .arg("1.0")
+                .arg("-1.69065929318241")
+                .arg("0.73248077421585")
+            .arg("biquad")
+                .arg("1.0")
+                .arg("-2.0")
+                .arg("1.0")
+                .arg("1.0")
+                .arg("-1.99004745483398")
+                .arg("0.99007225036621");
+
+        cmd
+    }
+
+    #[test]
+    fn sox_filter_suite() {
+        let (raw_stdout, raw_stderr) = sox_ref_sine_cmd()
+            .output()
+            .map(|o| (o.stdout, o.stderr))
+            .unwrap();
+
+        assert!(
+            raw_stderr.len() == 0,
+            "non-empty stderr from running sox as subprocess: {}",
+            std::str::from_utf8(&raw_stderr).unwrap(),
+        );
+
+        let num_bytes = raw_stdout.len();
+        let mut reader = Cursor::new(raw_stdout);
+
+        let mut samples = Vec::new();
+
+        for _ in 0..(num_bytes / 4) {
+            let x = reader.read_f32::<LittleEndian>().unwrap();
+            let sample = [x as f64, 0.0, 0.0, 0.0, 0.0];
+            samples.push(sample);
+        }
+
+        let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
+
+        let (raw_stdout, _raw_stderr) = sox_ref_sine_filtered_cmd()
+            .output()
+            .map(|o| (o.stdout, o.stderr))
+            .unwrap();
+
+        let num_bytes = raw_stdout.len();
+        let mut reader = Cursor::new(raw_stdout);
+
+        let mut fx = Vec::new();
+
+        for _ in 0..(num_bytes / 4) {
+            fx.push(reader.read_f32::<LittleEndian>().unwrap() as f64);
+        }
+
+        assert_eq!(filtered_samples.len(), fx.len());
+        // for (i, (px, ex)) in filtered_samples.zip(fx).enumerate() {
+        //     println!("{}", i);
+        //     assert_abs_diff_eq!(px, ex);
+        //     // "samples @ {} differ: {} != {}", i, px, ex
+        // }
     }
 }
 
