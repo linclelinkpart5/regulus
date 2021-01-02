@@ -201,7 +201,7 @@ mod tests {
 
     use byteorder::{LittleEndian, ReadBytesExt};
 
-    use approx::assert_abs_diff_eq;
+    use approx::{abs_diff_eq, assert_abs_diff_eq};
 
     #[test]
     fn coefficients() {
@@ -316,14 +316,15 @@ mod tests {
     fn sox_ref_sine_cmd() -> Command {
         let mut cmd = Command::new("sox");
         cmd
-            .arg("--no-dither")
             .arg("--null")
             .arg("--rate").arg("48000")
             .arg("--endian").arg("little")
             .arg("--channels").arg("1")
-            .arg("--type").arg("f32")
+            .arg("--type").arg("f64")
             .arg("-")
-            .arg("synth").arg("3").arg("sine").arg("997");
+            .arg("synth").arg("3").arg("sine").arg("997")
+            // Add some headroom to prevent clipping.
+            .arg("gain").arg("-2");
 
         cmd
     }
@@ -369,34 +370,46 @@ mod tests {
 
         let mut samples = Vec::new();
 
-        for _ in 0..(num_bytes / 4) {
-            let x = reader.read_f32::<LittleEndian>().unwrap();
+        for _ in 0..(num_bytes / 8) {
+            let x = reader.read_f64::<LittleEndian>().unwrap();
             let sample = [x as f64, 0.0, 0.0, 0.0, 0.0];
             samples.push(sample);
         }
 
         let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
 
-        let (raw_stdout, _raw_stderr) = sox_ref_sine_filtered_cmd()
+        let (raw_stdout, raw_stderr) = sox_ref_sine_filtered_cmd()
             .output()
             .map(|o| (o.stdout, o.stderr))
             .unwrap();
+
+        assert!(
+            raw_stderr.len() == 0,
+            "non-empty stderr from running sox as subprocess: {}",
+            std::str::from_utf8(&raw_stderr).unwrap(),
+        );
 
         let num_bytes = raw_stdout.len();
         let mut reader = Cursor::new(raw_stdout);
 
         let mut fx = Vec::new();
 
-        for _ in 0..(num_bytes / 4) {
-            fx.push(reader.read_f32::<LittleEndian>().unwrap() as f64);
+        for _ in 0..(num_bytes / 8) {
+            fx.push(reader.read_f64::<LittleEndian>().unwrap() as f64);
         }
 
-        assert_eq!(filtered_samples.len(), fx.len());
-        // for (i, (px, ex)) in filtered_samples.zip(fx).enumerate() {
-        //     println!("{}", i);
-        //     assert_abs_diff_eq!(px, ex);
-        //     // "samples @ {} differ: {} != {}", i, px, ex
-        // }
+        // Check that the number of samples stays the same.
+        assert_eq!(
+            filtered_samples.len(), fx.len(),
+            "sample counts differ: {} != {}", filtered_samples.len(), fx.len(),
+        );
+
+        for (i, (px, ex)) in filtered_samples.zip(fx).enumerate() {
+            assert!(
+                abs_diff_eq!(px, ex, epsilon = 1e-9),
+                "samples @ {} differ: {} != {}", i, px, ex
+            );
+        }
     }
 }
 
