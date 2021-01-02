@@ -199,7 +199,7 @@ mod tests {
     use std::io::Cursor;
     use std::process::Command;
 
-    use byteorder::{LittleEndian, ReadBytesExt};
+    use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
 
     use approx::{abs_diff_eq, assert_abs_diff_eq};
 
@@ -386,55 +386,37 @@ mod tests {
         cmd
     }
 
+    fn sox_eval(mut cmd: Command) -> Vec<f64> {
+        let (raw_stdout, raw_stderr) = cmd
+            .output()
+            .map(|o| (o.stdout, o.stderr))
+            .unwrap();
+
+        assert!(
+            raw_stderr.len() == 0,
+            "non-empty stderr from running sox as subprocess: {}",
+            std::str::from_utf8(&raw_stderr).unwrap(),
+        );
+
+        let mut res = vec![0.0f64; raw_stdout.len() / std::mem::size_of::<f64>()];
+        LittleEndian::read_f64_into(&raw_stdout, &mut res);
+
+        res
+    }
+
     #[test]
     fn sox_filter_suite() {
         const RATE: u32 = 48000;
         const KIND: &WaveKind = &WaveKind::Sine;
         const FREQ: u32 = 997;
 
-        let (raw_stdout, raw_stderr) = sox_gen_wave_cmd(RATE, KIND, FREQ)
-            .output()
-            .map(|o| (o.stdout, o.stderr))
-            .unwrap();
-
-        assert!(
-            raw_stderr.len() == 0,
-            "non-empty stderr from running sox as subprocess: {}",
-            std::str::from_utf8(&raw_stderr).unwrap(),
-        );
-
-        let num_bytes = raw_stdout.len();
-        let mut reader = Cursor::new(raw_stdout);
-
-        let mut samples = Vec::new();
-
-        for _ in 0..(num_bytes / 8) {
-            let x = reader.read_f64::<LittleEndian>().unwrap();
-            let sample = [x as f64, 0.0, 0.0, 0.0, 0.0];
-            samples.push(sample);
-        }
+        let samples = sox_eval(sox_gen_wave_cmd(RATE, KIND, FREQ))
+            .into_iter()
+            .map(|x| [x, 0.0, 0.0, 0.0, 0.0]);
 
         let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
 
-        let (raw_stdout, raw_stderr) = sox_gen_wave_filtered_cmd(RATE, KIND, FREQ)
-            .output()
-            .map(|o| (o.stdout, o.stderr))
-            .unwrap();
-
-        assert!(
-            raw_stderr.len() == 0,
-            "non-empty stderr from running sox as subprocess: {}",
-            std::str::from_utf8(&raw_stderr).unwrap(),
-        );
-
-        let num_bytes = raw_stdout.len();
-        let mut reader = Cursor::new(raw_stdout);
-
-        let mut fx = Vec::new();
-
-        for _ in 0..(num_bytes / 8) {
-            fx.push(reader.read_f64::<LittleEndian>().unwrap() as f64);
-        }
+        let fx = sox_eval(sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));
 
         // Check that the number of samples stays the same.
         assert_eq!(
