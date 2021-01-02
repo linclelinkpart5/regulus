@@ -102,7 +102,7 @@ impl Util {
 mod tests {
     use super::*;
 
-    use sample::Signal;
+    use dasp::Signal;
 
     use approx::assert_relative_eq;
 
@@ -149,11 +149,11 @@ mod tests {
         }
 
         // Sine wave.
-        let mut mono_signal = sample::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).sine();
+        let mut mono_signal = dasp::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).sine();
         let signal =
             std::iter::from_fn(move || {
                 let mut s = AMPLITUDES;
-                let x = mono_signal.next()[0];
+                let x = mono_signal.next();
                 s.iter_mut().for_each(|e| *e *= x);
                 Some(s)
             })
@@ -170,11 +170,11 @@ mod tests {
         }
 
         // Square wave.
-        let mut mono_signal = sample::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).square();
+        let mut mono_signal = dasp::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).square();
         let signal =
             std::iter::from_fn(move || {
                 let mut s = AMPLITUDES;
-                let x = mono_signal.next()[0];
+                let x = mono_signal.next();
                 s.iter_mut().for_each(|e| *e *= x);
                 Some(s)
             })

@@ -50,7 +50,7 @@ pub use loudness::Loudness;
 mod tests {
     use super::*;
 
-    use sample::signal::Signal;
+    use dasp::signal::Signal;
 
     use approx::assert_abs_diff_eq;
 
@@ -61,10 +61,10 @@ mod tests {
         // the indicated loudness will equal -3.01 LKFS.
         let sample_rate: u32 = 48000;
 
-        let mut mono_raw_signal = sample::signal::rate(48000.0).const_hz(997.0).sine();
+        let mut mono_raw_signal = dasp::signal::rate(48000.0).const_hz(997.0).sine();
         let raw_signal =
             std::iter::from_fn(move || {
-                let x = mono_raw_signal.next()[0];
+                let x = mono_raw_signal.next();
                 Some([x, 0.0, 0.0, 0.0, 0.0])
             })
             .take(sample_rate as usize * 10)
