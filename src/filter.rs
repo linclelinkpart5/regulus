@@ -313,48 +313,86 @@ mod tests {
         }
     }
 
-    fn sox_ref_sine_cmd() -> Command {
+    enum WaveKind {
+        Sine,
+        Square,
+        Triangle,
+        Sawtooth,
+    }
+
+    impl WaveKind {
+        const fn name(&self) -> &'static str {
+            match self {
+                Self::Sine => "sine",
+                Self::Square => "square",
+                Self::Triangle => "triangle",
+                Self::Sawtooth => "sawtooth",
+            }
+        }
+    }
+
+    fn sox_gen_wave_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
         let mut cmd = Command::new("sox");
         cmd
+            // No input file name.
             .arg("--null")
-            .arg("--rate").arg("48000")
+
+            // Set sample rate.
+            .arg("--rate").arg(sample_rate.to_string())
+
+            // Set output data format params.
             .arg("--endian").arg("little")
             .arg("--channels").arg("1")
             .arg("--type").arg("f64")
+
+            // Output to stdout.
             .arg("-")
-            .arg("synth").arg("3").arg("sine").arg("997")
-            // Add some headroom to prevent clipping.
-            .arg("gain").arg("-2");
+
+            // Wave to generate/synthesize.
+            .arg("synth").arg("3").arg(kind.name()).arg(frequency.to_string())
+
+            // Insert some headroom to prevent clipping.
+            .arg("gain").arg("-2")
+        ;
 
         cmd
     }
 
-    fn sox_ref_sine_filtered_cmd() -> Command {
-        // biquad 1.53512485958697 -2.69169618940638 1.19839281085285 1.0 -1.69065929318241 0.73248077421585
-        // biquad 1.0 -2.0 1.0 1.0 -1.99004745483398 0.99007225036621
-        let mut cmd = sox_ref_sine_cmd();
+    fn sox_gen_wave_filtered_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
+        let mut cmd = sox_gen_wave_cmd(sample_rate, kind, frequency);
+
+        let shf = Kind::Shelving.coefficients(sample_rate);
+        let hpf = Kind::HighPass.coefficients(sample_rate);
+
         cmd
+            // Shelving filter.
             .arg("biquad")
-                .arg("1.53512485958697")
-                .arg("-2.69169618940638")
-                .arg("1.19839281085285")
+                .arg(shf.b0.to_string())
+                .arg(shf.b1.to_string())
+                .arg(shf.b2.to_string())
                 .arg("1.0")
-                .arg("-1.69065929318241")
-                .arg("0.73248077421585")
+                .arg(shf.a1.to_string())
+                .arg(shf.a2.to_string())
+            // High pass filter.
             .arg("biquad")
+                .arg(hpf.b0.to_string())
+                .arg(hpf.b1.to_string())
+                .arg(hpf.b2.to_string())
                 .arg("1.0")
-                .arg("-2.0")
-                .arg("1.0")
-                .arg("1.0")
-                .arg("-1.99004745483398")
-                .arg("0.99007225036621");
+                .arg(hpf.a1.to_string())
+                .arg(hpf.a2.to_string())
+        ;
 
         cmd
     }
 
     #[test]
     fn sox_filter_suite() {
-        let (raw_stdout, raw_stderr) = sox_ref_sine_cmd()
+        const RATE: u32 = 48000;
+        const KIND: &WaveKind = &WaveKind::Sine;
+        const FREQ: u32 = 997;
+
+        let (raw_stdout, raw_stderr) = sox_gen_wave_cmd(RATE, KIND, FREQ)
             .output()
             .map(|o| (o.stdout, o.stderr))
             .unwrap();
@@ -378,7 +416,7 @@ mod tests {
 
         let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
 
-        let (raw_stdout, raw_stderr) = sox_ref_sine_filtered_cmd()
+        let (raw_stdout, raw_stderr) = sox_gen_wave_filtered_cmd(RATE, KIND, FREQ)
             .output()
             .map(|o| (o.stdout, o.stderr))
             .unwrap();
