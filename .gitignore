@@ -1,2 +1,6 @@
 /target
 **/*.rs.bk
+
+# Custom audio files for testing
+audio/*
+!audio/README
