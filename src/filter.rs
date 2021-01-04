@@ -196,12 +196,11 @@ where
 mod tests {
     use super::*;
 
-    use std::io::Cursor;
     use std::process::Command;
 
-    use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
-
     use approx::{abs_diff_eq, assert_abs_diff_eq};
+
+    use crate::test_util::{TestUtil, WaveKind};
 
     #[test]
     fn coefficients() {
@@ -313,95 +312,32 @@ mod tests {
         }
     }
 
-    enum WaveKind {
-        Sine,
-        Square,
-        Triangle,
-        Sawtooth,
-    }
-
-    impl WaveKind {
-        const fn name(&self) -> &'static str {
-            match self {
-                Self::Sine => "sine",
-                Self::Square => "square",
-                Self::Triangle => "triangle",
-                Self::Sawtooth => "sawtooth",
-            }
-        }
-    }
-
-    fn sox_gen_wave_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
-        let mut cmd = Command::new("sox");
-        cmd
-            // No input file name.
-            .arg("--null")
-
-            // Set sample rate.
-            .arg("--rate").arg(sample_rate.to_string())
-
-            // Set output data format params.
-            .arg("--endian").arg("little")
-            .arg("--channels").arg("1")
-            .arg("--type").arg("f64")
-
-            // Output to stdout.
-            .arg("-")
-
-            // Wave to generate/synthesize.
-            .arg("synth").arg("3").arg(kind.name()).arg(frequency.to_string())
-
-            // Insert some headroom to prevent clipping.
-            .arg("gain").arg("-2")
-        ;
-
-        cmd
-    }
-
     fn sox_gen_wave_filtered_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
-        let mut cmd = sox_gen_wave_cmd(sample_rate, kind, frequency);
+        let mut cmd = TestUtil::sox_gen_wave_cmd(sample_rate, kind, frequency);
 
-        let shf = Kind::Shelving.coefficients(sample_rate);
-        let hpf = Kind::HighPass.coefficients(sample_rate);
+        // Shelving filter.
+        let coeff = Kind::Shelving.coefficients(sample_rate);
+        cmd.arg("biquad")
+            .arg(coeff.b0.to_string())
+            .arg(coeff.b1.to_string())
+            .arg(coeff.b2.to_string())
+            .arg("1.0")
+            .arg(coeff.a1.to_string())
+            .arg(coeff.a2.to_string())
+        ;
 
-        cmd
-            // Shelving filter.
-            .arg("biquad")
-                .arg(shf.b0.to_string())
-                .arg(shf.b1.to_string())
-                .arg(shf.b2.to_string())
-                .arg("1.0")
-                .arg(shf.a1.to_string())
-                .arg(shf.a2.to_string())
-            // High pass filter.
-            .arg("biquad")
-                .arg(hpf.b0.to_string())
-                .arg(hpf.b1.to_string())
-                .arg(hpf.b2.to_string())
-                .arg("1.0")
-                .arg(hpf.a1.to_string())
-                .arg(hpf.a2.to_string())
+        // High pass filter.
+        let coeff = Kind::HighPass.coefficients(sample_rate);
+        cmd.arg("biquad")
+            .arg(coeff.b0.to_string())
+            .arg(coeff.b1.to_string())
+            .arg(coeff.b2.to_string())
+            .arg("1.0")
+            .arg(coeff.a1.to_string())
+            .arg(coeff.a2.to_string())
         ;
 
         cmd
-    }
-
-    fn sox_eval(mut cmd: Command) -> Vec<f64> {
-        let (raw_stdout, raw_stderr) = cmd
-            .output()
-            .map(|o| (o.stdout, o.stderr))
-            .unwrap();
-
-        assert!(
-            raw_stderr.len() == 0,
-            "non-empty stderr from running sox as subprocess: {}",
-            std::str::from_utf8(&raw_stderr).unwrap(),
-        );
-
-        let mut res = vec![0.0f64; raw_stdout.len() / std::mem::size_of::<f64>()];
-        LittleEndian::read_f64_into(&raw_stdout, &mut res);
-
-        res
     }
 
     #[test]
@@ -410,13 +346,13 @@ mod tests {
         const KIND: &WaveKind = &WaveKind::Sine;
         const FREQ: u32 = 997;
 
-        let samples = sox_eval(sox_gen_wave_cmd(RATE, KIND, FREQ))
+        let samples = TestUtil::sox_eval_samples(&mut TestUtil::sox_gen_wave_cmd(RATE, KIND, FREQ))
             .into_iter()
             .map(|x| [x, 0.0, 0.0, 0.0, 0.0]);
 
         let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
 
-        let fx = sox_eval(sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));
+        let fx = TestUtil::sox_eval_samples(&mut sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));
 
         // Check that the number of samples stays the same.
         assert_eq!(

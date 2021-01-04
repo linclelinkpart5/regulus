@@ -1,10 +1,27 @@
 #![cfg(test)]
 
-use std::io::Result as IoResult;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+use byteorder::{ByteOrder, LittleEndian};
+
+pub(crate) enum WaveKind {
+    Sine,
+    Square,
+    Triangle,
+    Sawtooth,
+}
+
+impl WaveKind {
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::Sine => "sine",
+            Self::Square => "square",
+            Self::Triangle => "triangle",
+            Self::Sawtooth => "sawtooth",
+        }
+    }
+}
 
 pub(crate) struct TestUtil;
 
@@ -84,6 +101,38 @@ impl TestUtil {
         LittleEndian::read_f64_into(&raw_stdout, &mut res);
 
         res
+    }
+
+    pub fn sox_gen_wave_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
+        let mut cmd = Command::new("sox");
+
+        cmd
+            // No input file name.
+            .arg("--null")
+
+            // Set sample rate.
+            .arg("--rate").arg(sample_rate.to_string())
+
+            // Set output data format params.
+            .arg("--endian").arg("little")
+            .arg("--channels").arg("1")
+            .arg("--type").arg("f64")
+
+            // Output to stdout.
+            .arg("-")
+
+            // Wave to generate/synthesize.
+            .arg("synth").arg("3").arg(kind.name()).arg(frequency.to_string())
+
+            // Insert some headroom to prevent clipping.
+            .arg("gain").arg("-2")
+        ;
+
+        cmd
+    }
+
+    fn sox_gen_wave(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Vec<f64> {
+        Self::sox_eval_samples(&mut Self::sox_gen_wave_cmd(sample_rate, kind, frequency))
     }
 
     pub fn load_audio_data(path: &Path) -> (Vec<f64>, u32, u8) {
