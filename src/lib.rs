@@ -8,6 +8,8 @@ pub mod gating;
 pub mod loudness;
 pub mod peak;
 
+pub(crate) mod test_util;
+
 pub use constants::MAX_CHANNELS;
 
 pub use filter::FilteredSamples;
