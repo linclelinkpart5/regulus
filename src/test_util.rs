@@ -1,9 +1,15 @@
 #![cfg(test)]
 
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use byteorder::{ByteOrder, LittleEndian};
+use claxon::FlacReader;
+// use hound::WavReader;
+use itertools::Itertools;
+
+use crate::MAX_CHANNELS;
 
 pub(crate) enum WaveKind {
     Sine,
@@ -31,6 +37,70 @@ impl TestUtil {
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
+    }
+
+    pub fn load_flac_data(path: &Path) -> (Vec<[f64; MAX_CHANNELS]>, u32, u32) {
+        let file = match File::open(path) {
+            Err(e) => panic!("could not open file: {}", e),
+            Ok(f) => f,
+        };
+
+        let mut reader = match FlacReader::new(file) {
+            Err(e) => panic!("could not read FLAC data: {}", e),
+            Ok(r) => r,
+        };
+
+        // Get stream info.
+        let info = reader.streaminfo();
+        let sample_rate = info.sample_rate;
+        let num_channels = info.channels;
+        let bits_per_sample = info.bits_per_sample;
+
+        assert!(
+            num_channels as usize <= MAX_CHANNELS,
+            "too many channels (max {}): {}", MAX_CHANNELS, num_channels,
+        );
+
+        // Since the samples are signed integers (one of 16/24/32-bit), need to
+        // normalize them to the range [-1.0, 1.0).
+        let a = match bits_per_sample {
+            0 => 0u32,
+            b => {
+                let shift = b - 1;
+                match 1u32.checked_shl(shift) {
+                    None => panic!("too many bits per sample (max 32): {}", b),
+                    Some(a) => a,
+                }
+            },
+        };
+        let amplitude = a as f64;
+
+        let samples = reader.samples()
+            .map(|res| {
+                match res {
+                    Err(e) => panic!("error while reading FLAC data: {}", e),
+                    Ok(s) => s,
+                }
+            })
+            .batching(|it| {
+                let mut s = [0.0f64; MAX_CHANNELS];
+
+                for i in 0..num_channels {
+                    let x = match it.next() {
+                        Some(x) => x,
+                        None if i == 0 => return None,
+                        None => panic!("incomplete frame at end of stream"),
+                    };
+
+                    s[i as usize] = x as f64 / amplitude;
+                }
+
+                Some(s)
+            })
+            .collect::<Vec<_>>()
+        ;
+
+        (samples, sample_rate, num_channels)
     }
 
     pub fn load_custom_audio_paths(dir_path: &Path) -> Vec<PathBuf> {
