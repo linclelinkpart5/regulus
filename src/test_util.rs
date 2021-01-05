@@ -40,15 +40,11 @@ impl TestUtil {
     }
 
     pub fn load_flac_data(path: &Path) -> (Vec<[f64; MAX_CHANNELS]>, u32, u32) {
-        let file = match File::open(path) {
-            Err(e) => panic!("could not open file: {}", e),
-            Ok(f) => f,
-        };
+        let file = File::open(path)
+            .unwrap_or_else(|e| panic!("could not open file: {}", e));
 
-        let mut reader = match FlacReader::new(file) {
-            Err(e) => panic!("could not read FLAC data: {}", e),
-            Ok(r) => r,
-        };
+        let mut reader = FlacReader::new(file)
+            .unwrap_or_else(|e| panic!("could not read FLAC data: {}", e));
 
         // Get stream info.
         let info = reader.streaminfo();
@@ -67,20 +63,15 @@ impl TestUtil {
             0 => 0u32,
             b => {
                 let shift = b - 1;
-                match 1u32.checked_shl(shift) {
-                    None => panic!("too many bits per sample (max 32): {}", b),
-                    Some(a) => a,
-                }
+                1u32.checked_shl(shift)
+                    .unwrap_or_else(|| panic!("too many bits per sample (max 32): {}", b))
             },
         };
         let amplitude = a as f64;
 
         let samples = reader.samples()
             .map(|res| {
-                match res {
-                    Err(e) => panic!("error while reading FLAC data: {}", e),
-                    Ok(s) => s,
-                }
+                res.unwrap_or_else(|e| panic!("error while reading FLAC data: {}", e))
             })
             .batching(|it| {
                 let mut s = [0.0f64; MAX_CHANNELS];
@@ -104,17 +95,13 @@ impl TestUtil {
     }
 
     pub fn load_custom_audio_paths(dir_path: &Path) -> Vec<PathBuf> {
-        let read_dir = match std::fs::read_dir(dir_path) {
-            Ok(rd) => rd,
-            Err(e) => panic!("could not read dir: {}", e),
-        };
+        let read_dir = std::fs::read_dir(dir_path)
+            .unwrap_or_else(|e| panic!("could not read dir: {}", e));
 
         let mut entries = read_dir
             .filter_map(|res| {
-                let dir_entry = match res {
-                    Ok(de) => de,
-                    Err(e) => panic!("could not read dir entry: {}", e),
-                };
+                let dir_entry = res
+                    .unwrap_or_else(|e| panic!("could not read dir entry: {}", e));
 
                 let path = dir_entry.path();
 
@@ -138,10 +125,8 @@ impl TestUtil {
     }
 
     pub fn sox_eval(cmd: &mut Command) -> Vec<u8> {
-        let output = match cmd.output() {
-            Err(e) => panic!("failed to execute command: {}", e),
-            Ok(o) => o,
-        };
+        let output = cmd.output()
+            .unwrap_or_else(|e| panic!("failed to execute command: {}", e));
 
         let Output { status, stdout, stderr } = output;
 
@@ -158,10 +143,8 @@ impl TestUtil {
     pub fn sox_eval_string(cmd: &mut Command) -> String {
         let raw_stdout = Self::sox_eval(cmd);
 
-        match String::from_utf8(raw_stdout) {
-            Err(e) => panic!("cannot convert stdout bytes into string: {}", e),
-            Ok(s) => s,
-        }
+        String::from_utf8(raw_stdout)
+            .unwrap_or_else(|e| panic!("cannot convert stdout bytes into string: {}", e))
     }
 
     pub fn sox_eval_samples(cmd: &mut Command) -> Vec<f64> {
