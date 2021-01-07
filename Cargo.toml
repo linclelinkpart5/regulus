@@ -1,18 +1,18 @@
 [package]
 name = "regulus"
 version = "0.1.0"
-authors = ["Mark LeMoine <thatsgobbles@gmail.com>"]
+authors = ["Mark LeMoine <linclelinkpart5@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-strum = "0.15.0"
 circular-queue = "0.2.1"
+dasp = { version = "0.11", features = ["signal"] }
+strum = "0.15.0"
 
 [dev-dependencies]
 approx = "0.3.2"
 byteorder = "1.3"
 claxon = "0.4"
-dasp = { version = "0.11", features = ["signal"] }
 hound = "3.4"
 itertools = "0.10"
 tempfile = "3"
