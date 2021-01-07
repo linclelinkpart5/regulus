@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::FlacReader;
-// use hound::WavReader;
+use hound::{WavReader, SampleFormat};
 use itertools::Itertools;
 
 use crate::MAX_CHANNELS;
@@ -92,6 +92,88 @@ impl TestUtil {
         ;
 
         (samples, sample_rate, num_channels)
+    }
+
+    pub fn load_wav_data(path: &Path) -> (Vec<[f64; MAX_CHANNELS]>, u32, u32) {
+        let file = File::open(path)
+            .unwrap_or_else(|e| panic!("could not open file: {}", e));
+
+        let mut reader = WavReader::new(file)
+            .unwrap_or_else(|e| panic!("could not read WAV data: {}", e));
+
+        // Get stream info.
+        let info = reader.spec();
+        let sample_rate = info.sample_rate;
+        let num_channels = info.channels;
+        let bits_per_sample = info.bits_per_sample;
+
+        // Smooth over integer and float sample types.
+        let data = match info.sample_format {
+            SampleFormat::Int => {
+                // Use i32, which will accommodate i8, i16, and i32.
+                // Since the samples are signed integers (one of 16/24/32-bit),
+                // need to normalize them to the range [-1.0, 1.0).
+                let a = match bits_per_sample {
+                    0 => 0u32,
+                    b => {
+                        let shift = b - 1;
+                        1u32.checked_shl(shift as u32)
+                            .unwrap_or_else(|| panic!("too many bits per sample (max 32): {}", b))
+                    },
+                };
+                let amplitude = a as f64;
+
+                let samples = reader.samples::<i32>()
+                    .map(|res| {
+                        res.unwrap_or_else(|e| panic!("error while reading WAV data: {}", e))
+                    })
+                    .batching(|it| {
+                        let mut s = [0.0f64; MAX_CHANNELS];
+
+                        for i in 0..num_channels {
+                            let x = match it.next() {
+                                Some(x) => x,
+                                None if i == 0 => return None,
+                                None => panic!("incomplete frame at end of stream"),
+                            };
+
+                            s[i as usize] = x as f64 / amplitude;
+                        }
+
+                        Some(s)
+                    })
+                    .collect::<Vec<_>>();
+
+                samples
+            },
+            SampleFormat::Float => {
+                // Use f32.
+                let samples = reader.samples::<f32>()
+                    .map(|res| {
+                        res.unwrap_or_else(|e| panic!("error while reading WAV data: {}", e))
+                    })
+                    .batching(|it| {
+                        let mut s = [0.0f64; MAX_CHANNELS];
+
+                        for i in 0..num_channels {
+                            let x = match it.next() {
+                                Some(x) => x,
+                                None if i == 0 => return None,
+                                None => panic!("incomplete frame at end of stream"),
+                            };
+
+                            s[i as usize] = x as f64;
+                        }
+
+                        Some(s)
+                    })
+                    .collect::<Vec<_>>();
+
+                samples
+            },
+        };
+
+        (data, sample_rate, num_channels as u32)
     }
 
     pub fn load_custom_audio_paths(dir_path: &Path) -> Vec<PathBuf> {
