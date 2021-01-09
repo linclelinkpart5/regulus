@@ -76,7 +76,6 @@ mod tests {
         let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
         let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter);
 
-        // assert_abs_diff_eq!(-3.01, loudness);
-        assert_abs_diff_eq!(loudness, -3.0102799213963327);
+        assert_abs_diff_eq!(loudness, -3.0102799213963327, epsilon = 1e-9);
     }
 }

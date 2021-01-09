@@ -1,8 +1,9 @@
 use std::f64::consts::PI;
 
-#[cfg(test)] use approx::AbsDiffEq;
+use dasp::{Sample, Frame};
+use dasp::sample::ToSample;
 
-use crate::constants::MAX_CHANNELS;
+#[cfg(test)] use approx::AbsDiffEq;
 
 #[derive(Copy, Clone, Debug)]
 enum Kind {
@@ -80,19 +81,20 @@ impl AbsDiffEq for Coefficients {
     }
 }
 
+// TODO: Clean this up when const generics are stabilized.
 #[derive(Copy, Clone, Debug)]
-struct FilterPass {
+struct FilterPass<F: Frame<Sample = f64>> {
     coeff: Coefficients,
-    m1: [f64; MAX_CHANNELS],
-    m2: [f64; MAX_CHANNELS],
+    m1: F,
+    m2: F,
 }
 
-impl FilterPass {
+impl<F: Frame<Sample = f64>> FilterPass<F> {
     fn from_coeff(coeff: Coefficients) -> Self {
         Self {
             coeff,
-            m1: [0.0; MAX_CHANNELS],
-            m2: [0.0; MAX_CHANNELS],
+            m1: F::EQUILIBRIUM,
+            m2: F::EQUILIBRIUM,
         }
     }
 
@@ -100,21 +102,25 @@ impl FilterPass {
         Self::from_coeff(kind.coefficients(sample_rate))
     }
 
-    pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
-        let mut output = [0.0f64; MAX_CHANNELS];
+    pub fn apply<I>(&mut self, input: &I) -> F
+    where
+        I: Frame<NumChannels = F::NumChannels>,
+        I::Sample: ToSample<f64>
+    {
+        // Copy and convert to f64.
+        let input: F = (*input).map(|x| x.to_sample::<f64>());
 
         // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
         // https://github.com/korken89/biquad-rs/blob/master/src/lib.rs
         let co = &self.coeff;
-        for ch in 0..MAX_CHANNELS {
-            let out = self.m1[ch] + co.b0 * input[ch];
-            self.m1[ch] = self.m2[ch] + co.b1 * input[ch] - co.a1 * out;
-            self.m2[ch] = co.b2 * input[ch] - co.a2 * out;
 
-            output[ch] = out;
-        }
+        // Note that `offset_amp`/`scale_amp` are scalar addition/product, and
+        // `add_amp`/`mul_amp` are vector addition/product.
+        let out = self.m1.add_amp(input.scale_amp(co.b0));
+        self.m1 = self.m2.add_amp(input.scale_amp(co.b1).add_amp(out.scale_amp(-co.a1)));
+        self.m2 = input.scale_amp(co.b2).add_amp(out.scale_amp(-co.a2));
 
-        output
+        out
     }
 }
 
@@ -123,12 +129,12 @@ impl FilterPass {
 /// effects of the listener's head, assumed to be roughly spherical. The second
 /// pass is a simple high pass filter.
 #[derive(Copy, Clone, Debug)]
-struct Filter {
-    pass_a: FilterPass,
-    pass_b: FilterPass,
+struct Filter<F: Frame<Sample = f64>> {
+    pass_a: FilterPass<F>,
+    pass_b: FilterPass<F>,
 }
 
-impl Filter {
+impl<F: Frame<Sample = f64>> Filter<F> {
     pub fn new(sample_rate: u32) -> Self {
         let pass_a = FilterPass::from_kind(Kind::Shelving, sample_rate);
         let pass_b = FilterPass::from_kind(Kind::HighPass, sample_rate);
@@ -136,24 +142,34 @@ impl Filter {
         Self { pass_a, pass_b, }
     }
 
-    pub fn apply(&mut self, input: &[f64; MAX_CHANNELS]) -> [f64; MAX_CHANNELS] {
+    pub fn apply<I>(&mut self, input: &I) -> F
+    where
+        I: Frame<NumChannels = F::NumChannels>,
+        I::Sample: ToSample<f64>
+    {
         self.pass_b.apply(&self.pass_a.apply(input))
     }
 }
 
 /// Iterator that peforms the K-weighted filtering step on each sample in an
 /// iterable.
-pub struct FilteredSamples<I>
+pub struct FilteredSamples<F, I>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    F: Frame<Sample = f64>,
+    I: Iterator,
+    I::Item: Frame<NumChannels = F::NumChannels>,
+    <I::Item as Frame>::Sample: ToSample<f64>,
 {
     samples: I,
-    filter: Filter,
+    filter: Filter<F>,
 }
 
-impl<I> FilteredSamples<I>
+impl<F, I> FilteredSamples<F, I>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    F: Frame<Sample = f64>,
+    I: Iterator,
+    I::Item: Frame<NumChannels = F::NumChannels>,
+    <I::Item as Frame>::Sample: ToSample<f64>,
 {
     pub fn new<II>(samples: II, sample_rate: u32) -> Self
     where
@@ -165,11 +181,14 @@ where
     }
 }
 
-impl<I> Iterator for FilteredSamples<I>
+impl<F, I> Iterator for FilteredSamples<F, I>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    F: Frame<Sample = f64>,
+    I: Iterator,
+    I::Item: Frame<NumChannels = F::NumChannels>,
+    <I::Item as Frame>::Sample: ToSample<f64>,
 {
-    type Item = I::Item;
+    type Item = F;
 
     fn next(&mut self) -> Option<Self::Item> {
         let raw_sample = self.samples.next()?;
@@ -183,9 +202,12 @@ where
     }
 }
 
-impl<I> ExactSizeIterator for FilteredSamples<I>
+impl<F, I> ExactSizeIterator for FilteredSamples<F, I>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]> + ExactSizeIterator
+    F: Frame<Sample = f64>,
+    I: Iterator + ExactSizeIterator,
+    I::Item: Frame<NumChannels = F::NumChannels>,
+    <I::Item as Frame>::Sample: ToSample<f64>,
 {
     fn len(&self) -> usize {
         self.samples.len()
@@ -262,7 +284,7 @@ mod tests {
 
     #[test]
     fn filter_pass_apply() {
-        let mut filter_pass = FilterPass::from_kind(Kind::Shelving, 48000);
+        let mut filter_pass: FilterPass<[_; 5]> = FilterPass::from_kind(Kind::Shelving, 48000);
 
         let expected_rows = vec![
             [-1.5351248595869702, -0.7675624297934851, 0.0, 0.7675624297934851, 1.5351248595869702],
@@ -280,15 +302,18 @@ mod tests {
         for expected in expected_rows {
             let produced = filter_pass.apply(&input);
 
-            for (e, p) in expected.iter().zip(&produced) {
-                assert_abs_diff_eq!(e, p);
+            for (i, (px, ex)) in produced.iter().zip(&expected).enumerate() {
+                assert!(
+                    abs_diff_eq!(px, ex, epsilon = 1e-9),
+                    "samples @ {} differ: {} != {}", i, px, ex
+                );
             }
         }
     }
 
     #[test]
     fn filter_apply() {
-        let mut filter = Filter::new(48000);
+        let mut filter = Filter::<[_; 5]>::new(48000);
 
         let expected_rows = vec![
             [-1.5351248595869702, -0.7675624297934851, 0.0, 0.7675624297934851, 1.5351248595869702],
@@ -297,7 +322,7 @@ mod tests {
             [-1.2274414804724807, -0.6137207402362403, 0.0, 0.6137207402362403, 1.2274414804724807],
             [-1.1454023918520506, -0.5727011959260253, 0.0, 0.5727011959260253, 1.1454023918520506],
             [-1.0744179430265826, -0.5372089715132913, 0.0, 0.5372089715132913, 1.0744179430265826],
-            [-1.014119318168482, -0.507059659084241, 0.0, 0.507059659084241, 1.014119318168482],
+            [-1.0141193181684820, -0.5070596590842410, 0.0, 0.5070596590842410, 1.014119318168482],
             [-0.9637923356857869, -0.48189616784289346, 0.0, 0.48189616784289346, 0.9637923356857869],
         ];
 
@@ -306,8 +331,11 @@ mod tests {
         for expected in expected_rows {
             let produced = filter.apply(&input);
 
-            for (e, p) in expected.iter().zip(&produced) {
-                assert_abs_diff_eq!(e, p);
+            for (i, (px, ex)) in produced.iter().zip(&expected).enumerate() {
+                assert!(
+                    abs_diff_eq!(px, ex, epsilon = 1e-9),
+                    "samples @ {} differ: {} != {}", i, px, ex
+                );
             }
         }
     }
@@ -350,7 +378,7 @@ mod tests {
             .into_iter()
             .map(|x| [x, 0.0, 0.0, 0.0, 0.0]);
 
-        let filtered_samples = FilteredSamples::new(samples, 48000).map(|s| s[0]);
+        let filtered_samples = FilteredSamples::<[_; 5], _>::new(samples, 48000).map(|s| s[0]);
 
         let fx = TestUtil::sox_eval_samples(&mut sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));
 
