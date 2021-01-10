@@ -34,26 +34,56 @@ impl WaveKind {
 pub(crate) struct FlacFrames<R: ReadBytes> {
     samples: FlacSamples<R>,
     num_channels: u32,
+    amplitude: f64,
+}
+
+impl<R: ReadBytes> FlacFrames<R> {
+    pub fn new(samples: FlacSamples<R>, num_channels: u32, bits_per_sample: u32) -> Self {
+        assert!(
+            num_channels as usize <= MAX_CHANNELS,
+            "too many channels (max {}): {}", MAX_CHANNELS, num_channels,
+        );
+
+        // Since the samples are signed integers (one of 16/24/32-bit), need to
+        // normalize them to the range [-1.0, 1.0).
+        let a = match bits_per_sample {
+            0 => 0u32,
+            b => {
+                let shift = b - 1;
+                1u32.checked_shl(shift)
+                    .unwrap_or_else(|| panic!("too many bits per sample (max 32): {}", b))
+            },
+        };
+        let amplitude = a as f64;
+
+        Self {
+            samples,
+            num_channels,
+            amplitude,
+        }
+    }
 }
 
 impl<R: ReadBytes> Iterator for FlacFrames<R> {
     type Item = ClaxonResult<[f64; MAX_CHANNELS]>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut s = [0.0f64; MAX_CHANNELS];
+        let mut frame = [0.0f64; MAX_CHANNELS];
 
-        for i in 0..self.num_channels {
-            let sample = match self.samples.next() {
+        for (i, f) in frame.iter_mut().enumerate().take(self.num_channels as usize) {
+            let raw_sample = match self.samples.next() {
                 Some(Ok(x)) => x,
                 Some(Err(e)) => return Some(Err(e)),
                 None if i == 0 => return None,
                 None => return Some(Err(ClaxonError::FormatError("incomplete frame at end of stream"))),
             };
 
-            s[i as usize] = sample.to_sample::<f64>();
+            let normalized_sample = raw_sample as f64 / self.amplitude;
+
+            *f = normalized_sample
         }
 
-        Some(Ok(s))
+        Some(Ok(frame))
     }
 }
 
