@@ -16,9 +16,7 @@ where
 {
     frames: I,
     frames_per_delta: usize,
-    frames_per_gate: usize,
-    circular_queue: CircularQueue<F>,
-    initialized: bool,
+    gate_frame_queue: CircularQueue<F>,
 }
 
 impl<I, F> GatedPowerIter<I, F>
@@ -27,17 +25,18 @@ where
     F: Frame<Sample = f64>,
 {
     pub fn new(frames: I, sample_rate: u32) -> Self {
+        // Number of frames to read each iteration once the queue is filled.
         let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
+
+        // Gate queue size, in frames.
         let frames_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
 
-        let circular_queue = CircularQueue::with_capacity(frames_per_gate);
+        let gate_frame_queue = CircularQueue::with_capacity(frames_per_gate);
 
         Self {
             frames,
             frames_per_delta,
-            frames_per_gate,
-            circular_queue,
-            initialized: false,
+            gate_frame_queue,
         }
     }
 }
@@ -50,35 +49,48 @@ where
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let samples_to_take = if !self.initialized {
-            // Set the initialized flag and take an entire gate's worth of samples.
-            self.initialized = true;
-            self.frames_per_gate
-        } else {
-            // Take a delta's worth of samples.
-            self.frames_per_delta
-        };
+        let is_empty = self.gate_frame_queue.is_empty();
+        let is_full = self.gate_frame_queue.is_full();
 
-        for _ in 0..samples_to_take {
-            // If this returns `None`, return `None` for this entire call.
-            let sample = self.frames.next()?;
+        match (is_empty, is_full) {
+            // Pre-initialized state, the queue needs to be filled.
+            (true, false) => {
+                while !self.gate_frame_queue.is_full() {
+                    // If there are no more frames to read, the queue cannot be
+                    // filled, so this iterator is now empty.
+                    let frame = self.frames.next()?;
+                    self.gate_frame_queue.push(frame);
+                }
+            },
 
-            // Push the new sample into the circular buffer.
-            self.circular_queue.push(sample);
+            // Working state, attempt to read and push another delta of frames
+            // to the queue.
+            (false, true) => {
+                for _ in 0..self.frames_per_delta {
+                    // If there are no more frames to read, the delta will be
+                    // incomplete, so this iterator is now empty.
+                    let frame = self.frames.next()?;
+                    self.gate_frame_queue.push(frame);
+                }
+            },
+
+            // Queue is partially full, meaning there were not enough initial
+            // frames to fill the queue, and ends this iterator.
+            (false, false) => return None,
+
+            // Can only occur with a zero-sized queue, meaning this iterator is
+            // trivially always empty.
+            (true, true) => return None,
         }
 
-        // At this point the buffer should be filled to capacity.
-        assert_eq!(self.frames_per_gate, self.circular_queue.len());
-
         // Calculate the mean squares of the current circular buffer.
-        // let mut channel_powers = [0.0f64; MAX_CHANNELS];
         let mut total_energy = F::EQUILIBRIUM;
-        for frame in self.circular_queue.iter() {
+        for frame in self.gate_frame_queue.iter() {
             let energy = frame.mul_amp(*frame);
             total_energy = total_energy.add_amp(energy);
         }
 
-        let power = total_energy.scale_amp(1.0 / self.frames_per_gate as f64);
+        let power = total_energy.scale_amp(1.0 / self.gate_frame_queue.capacity() as f64);
 
         Some(power)
     }

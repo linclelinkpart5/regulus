@@ -5,7 +5,7 @@ authors = ["Mark LeMoine <linclelinkpart5@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-circular-queue = "0.2.1"
+circular-queue = "0.2.6"
 dasp = { version = "0.11", features = ["signal"] }
 strum = "0.15.0"
 
