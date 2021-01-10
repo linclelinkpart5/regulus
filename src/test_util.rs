@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use byteorder::{ByteOrder, LittleEndian};
-use claxon::FlacReader;
+use claxon::{Error as ClaxonError, FlacReader, FlacSamples, Result as ClaxonResult};
+use claxon::input::ReadBytes;
+use dasp::Sample;
 use hound::{WavReader, SampleFormat};
 use itertools::Itertools;
 
@@ -26,6 +28,32 @@ impl WaveKind {
             Self::Triangle => "triangle",
             Self::Sawtooth => "sawtooth",
         }
+    }
+}
+
+pub(crate) struct FlacFrames<R: ReadBytes> {
+    samples: FlacSamples<R>,
+    num_channels: u32,
+}
+
+impl<R: ReadBytes> Iterator for FlacFrames<R> {
+    type Item = ClaxonResult<[f64; MAX_CHANNELS]>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut s = [0.0f64; MAX_CHANNELS];
+
+        for i in 0..self.num_channels {
+            let sample = match self.samples.next() {
+                Some(Ok(x)) => x,
+                Some(Err(e)) => return Some(Err(e)),
+                None if i == 0 => return None,
+                None => return Some(Err(ClaxonError::FormatError("incomplete frame at end of stream"))),
+            };
+
+            s[i as usize] = sample.to_sample::<f64>();
+        }
+
+        Some(Ok(s))
     }
 }
 
