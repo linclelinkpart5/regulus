@@ -2,48 +2,50 @@
 use std::iter::FusedIterator;
 
 use circular_queue::CircularQueue;
+use dasp::Frame;
 
-use crate::constants::MAX_CHANNELS;
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
-const GATE_FACTOR: u64 = 4;
-const GATE_LENGTH_MS: u64 = GATE_DELTA_MS * GATE_FACTOR;
+const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowerIter<I>
+pub struct GatedPowerIter<I, F>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    I: Iterator<Item = F>,
+    F: Frame<Sample = f64>,
 {
-    sample_iter: I,
-    samples_per_delta: usize,
-    samples_per_gate: usize,
-    circular_queue: CircularQueue<[f64; MAX_CHANNELS]>,
+    frames: I,
+    frames_per_delta: usize,
+    frames_per_gate: usize,
+    circular_queue: CircularQueue<F>,
     initialized: bool,
 }
 
-impl<I> GatedPowerIter<I>
+impl<I, F> GatedPowerIter<I, F>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    I: Iterator<Item = F>,
+    F: Frame<Sample = f64>,
 {
-    pub fn new(sample_iter: I, sample_rate: u32) -> Self {
-        let samples_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
-        let samples_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
+    pub fn new(frames: I, sample_rate: u32) -> Self {
+        let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
+        let frames_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
 
-        let circular_queue = CircularQueue::with_capacity(samples_per_gate);
+        let circular_queue = CircularQueue::with_capacity(frames_per_gate);
 
         Self {
-            sample_iter,
-            samples_per_delta,
-            samples_per_gate,
+            frames,
+            frames_per_delta,
+            frames_per_gate,
             circular_queue,
             initialized: false,
         }
     }
 }
 
-impl<I> Iterator for GatedPowerIter<I>
+impl<I, F> Iterator for GatedPowerIter<I, F>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    I: Iterator<Item = F>,
+    F: Frame<Sample = f64>,
 {
     type Item = I::Item;
 
@@ -51,46 +53,46 @@ where
         let samples_to_take = if !self.initialized {
             // Set the initialized flag and take an entire gate's worth of samples.
             self.initialized = true;
-            self.samples_per_gate
+            self.frames_per_gate
         } else {
             // Take a delta's worth of samples.
-            self.samples_per_delta
+            self.frames_per_delta
         };
 
         for _ in 0..samples_to_take {
             // If this returns `None`, return `None` for this entire call.
-            let sample = self.sample_iter.next()?;
+            let sample = self.frames.next()?;
 
             // Push the new sample into the circular buffer.
             self.circular_queue.push(sample);
         }
 
         // At this point the buffer should be filled to capacity.
-        assert_eq!(self.samples_per_gate, self.circular_queue.len());
+        assert_eq!(self.frames_per_gate, self.circular_queue.len());
 
         // Calculate the mean squares of the current circular buffer.
-        let mut channel_powers = [0.0f64; MAX_CHANNELS];
-        for ch in 0..MAX_CHANNELS {
-            let mut channel_energy = 0.0;
-            for sample in self.circular_queue.iter() {
-                channel_energy += sample[ch] * sample[ch];
-            }
-
-            channel_powers[ch] = channel_energy / self.samples_per_gate as f64;
+        // let mut channel_powers = [0.0f64; MAX_CHANNELS];
+        let mut total_energy = F::EQUILIBRIUM;
+        for frame in self.circular_queue.iter() {
+            let energy = frame.mul_amp(*frame);
+            total_energy = total_energy.add_amp(energy);
         }
 
-        Some(channel_powers)
+        let power = total_energy.scale_amp(1.0 / self.frames_per_gate as f64);
+
+        Some(power)
     }
 }
 
-impl<I> FusedIterator for GatedPowerIter<I>
+impl<I, F> FusedIterator for GatedPowerIter<I, F>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    I: Iterator<Item = F>,
+    F: Frame<Sample = f64>,
 {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     // #[test]
     // fn gated_power_iter() {
