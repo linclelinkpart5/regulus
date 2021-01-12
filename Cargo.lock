@@ -45,8 +45,7 @@ dependencies = [
 [[package]]
 name = "claxon"
 version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
+source = "git+https://github.com/ruuda/claxon?rev=66bf34395d9285e896331c40effdae38f3c3db5e#66bf34395d9285e896331c40effdae38f3c3db5e"
 
 [[package]]
 name = "dasp"

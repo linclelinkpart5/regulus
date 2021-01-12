@@ -1,13 +1,13 @@
 #![cfg(test)]
 
 use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use byteorder::{ByteOrder, LittleEndian};
-use claxon::{Error as ClaxonError, FlacReader, FlacSamples, Result as ClaxonResult};
-use claxon::input::ReadBytes;
-use dasp::Sample;
+use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
+use claxon::input::BufferedReader;
 use hound::{WavReader, SampleFormat};
 use itertools::Itertools;
 
@@ -31,14 +31,19 @@ impl WaveKind {
     }
 }
 
-pub(crate) struct FlacFrames<R: ReadBytes> {
-    samples: FlacSamples<R>,
+pub(crate) struct FlacFrames<R: Read> {
+    samples: FlacIntoSamples<BufferedReader<R>>,
     num_channels: u32,
     amplitude: f64,
 }
 
-impl<R: ReadBytes> FlacFrames<R> {
-    pub fn new(samples: FlacSamples<R>, num_channels: u32, bits_per_sample: u32) -> Self {
+impl<R: Read> FlacFrames<R> {
+    pub fn new(reader: FlacReader<R>) -> Self {
+        // Get stream info.
+        let info = reader.streaminfo();
+        let num_channels = info.channels;
+        let bits_per_sample = info.bits_per_sample;
+
         assert!(
             num_channels as usize <= MAX_CHANNELS,
             "too many channels (max {}): {}", MAX_CHANNELS, num_channels,
@@ -47,7 +52,7 @@ impl<R: ReadBytes> FlacFrames<R> {
         // Since the samples are signed integers (one of 16/24/32-bit), need to
         // normalize them to the range [-1.0, 1.0).
         let a = match bits_per_sample {
-            0 => 0u32,
+            0 => panic!("bits per sample is 0"),
             b => {
                 let shift = b - 1;
                 1u32.checked_shl(shift)
@@ -55,6 +60,8 @@ impl<R: ReadBytes> FlacFrames<R> {
             },
         };
         let amplitude = a as f64;
+
+        let samples = reader.into_samples();
 
         Self {
             samples,
@@ -64,7 +71,7 @@ impl<R: ReadBytes> FlacFrames<R> {
     }
 }
 
-impl<R: ReadBytes> Iterator for FlacFrames<R> {
+impl<R: Read> Iterator for FlacFrames<R> {
     type Item = ClaxonResult<[f64; MAX_CHANNELS]>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -97,59 +104,20 @@ impl TestUtil {
             .unwrap_or(false)
     }
 
-    pub fn load_flac_data(path: &Path) -> (Vec<[f64; MAX_CHANNELS]>, u32, u32) {
+    pub fn load_flac_data(path: &Path) -> (FlacFrames<File>, u32) {
         let file = File::open(path)
             .unwrap_or_else(|e| panic!("could not open file: {}", e));
 
-        let mut reader = FlacReader::new(file)
+        let reader = FlacReader::new(file)
             .unwrap_or_else(|e| panic!("could not read FLAC data: {}", e));
 
         // Get stream info.
         let info = reader.streaminfo();
         let sample_rate = info.sample_rate;
-        let num_channels = info.channels;
-        let bits_per_sample = info.bits_per_sample;
 
-        assert!(
-            num_channels as usize <= MAX_CHANNELS,
-            "too many channels (max {}): {}", MAX_CHANNELS, num_channels,
-        );
+        let frames = FlacFrames::new(reader);
 
-        // Since the samples are signed integers (one of 16/24/32-bit), need to
-        // normalize them to the range [-1.0, 1.0).
-        let a = match bits_per_sample {
-            0 => 0u32,
-            b => {
-                let shift = b - 1;
-                1u32.checked_shl(shift)
-                    .unwrap_or_else(|| panic!("too many bits per sample (max 32): {}", b))
-            },
-        };
-        let amplitude = a as f64;
-
-        let samples = reader.samples()
-            .map(|res| {
-                res.unwrap_or_else(|e| panic!("error while reading FLAC data: {}", e))
-            })
-            .batching(|it| {
-                let mut s = [0.0f64; MAX_CHANNELS];
-
-                for i in 0..num_channels {
-                    let x = match it.next() {
-                        Some(x) => x,
-                        None if i == 0 => return None,
-                        None => panic!("incomplete frame at end of stream"),
-                    };
-
-                    s[i as usize] = x as f64 / amplitude;
-                }
-
-                Some(s)
-            })
-            .collect::<Vec<_>>()
-        ;
-
-        (samples, sample_rate, num_channels)
+        (frames, sample_rate)
     }
 
     pub fn load_wav_data(path: &Path) -> (Vec<[f64; MAX_CHANNELS]>, u32, u32) {
