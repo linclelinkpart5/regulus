@@ -48,8 +48,8 @@ fn amplitude(bits_per_sample: u32) -> f64 {
 
 pub(crate) struct FlacFrames<R: Read> {
     samples: FlacIntoSamples<BufferedReader<R>>,
-    num_channels: u32,
-    sample_rate: u32,
+    pub num_channels: u32,
+    pub sample_rate: u32,
     amplitude: f64,
 }
 
@@ -124,8 +124,8 @@ impl<R: Read> Iterator for WavNormedSamples<R> {
 
 pub(crate) struct WavFrames<R: Read> {
     samples: WavNormedSamples<R>,
-    num_channels: u32,
-    sample_rate: u32,
+    pub num_channels: u32,
+    pub sample_rate: u32,
 }
 
 impl<R: Read> WavFrames<R> {
