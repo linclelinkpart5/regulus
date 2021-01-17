@@ -8,8 +8,8 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
+// use dasp::Frame;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
-use itertools::Itertools;
 
 use crate::MAX_CHANNELS;
 
@@ -51,6 +51,7 @@ pub(crate) struct FlacFrames<R: Read> {
     pub num_channels: u32,
     pub sample_rate: u32,
     amplitude: f64,
+    // _marker: std::marker::PhantomData<F>,
 }
 
 impl<R: Read> FlacFrames<R> {
@@ -75,6 +76,7 @@ impl<R: Read> FlacFrames<R> {
             num_channels,
             sample_rate,
             amplitude,
+            // _marker: std::marker::PhantomData,
         }
     }
 }
@@ -85,6 +87,7 @@ impl<R: Read> Iterator for FlacFrames<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut frame = [0.0f64; MAX_CHANNELS];
 
+        // TODO: Replace with `dasp_frame::Frame::channels_mut` once stabilized.
         for (i, f) in frame.iter_mut().enumerate().take(self.num_channels as usize) {
             let raw_sample = match self.samples.next() {
                 Some(Ok(x)) => x,
