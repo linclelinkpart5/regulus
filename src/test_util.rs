@@ -181,6 +181,37 @@ impl<R: Read> Iterator for WavFrames<R> {
     }
 }
 
+pub(crate) enum TestReader<R: Read> {
+    Flac(FlacFrames<R>),
+    Wav(WavFrames<R>),
+}
+
+impl TestReader<File> {
+    pub fn read_path(path: &Path) -> Self {
+        let ext = path.extension()
+            .unwrap_or_else(|| panic!("path does not have an extension: {}", path.display()));
+
+        if ext == "flac" {
+            Self::Flac(TestUtil::load_flac_data(path))
+        } else if ext == "wav" {
+            Self::Wav(TestUtil::load_wav_data(path))
+        } else {
+            panic!("unknown extension: {:?}", ext);
+        }
+    }
+}
+
+impl<R: Read> Iterator for TestReader<R> {
+    type Item = [f64; MAX_CHANNELS];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Flac(fs) => fs.next().map(Result::unwrap),
+            Self::Wav(fs) => fs.next().map(Result::unwrap),
+        }
+    }
+}
+
 pub(crate) struct TestUtil;
 
 impl TestUtil {
