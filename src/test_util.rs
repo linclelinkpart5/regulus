@@ -8,7 +8,8 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-// use dasp::Frame;
+use dasp::Frame;
+use dasp::signal::FromIterator as SignalFromIterator;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 
 use crate::MAX_CHANNELS;
@@ -51,7 +52,6 @@ pub(crate) struct FlacFrames<R: Read> {
     pub num_channels: u32,
     pub sample_rate: u32,
     amplitude: f64,
-    // _marker: std::marker::PhantomData<F>,
 }
 
 impl<R: Read> FlacFrames<R> {
@@ -76,7 +76,6 @@ impl<R: Read> FlacFrames<R> {
             num_channels,
             sample_rate,
             amplitude,
-            // _marker: std::marker::PhantomData,
         }
     }
 }
@@ -87,8 +86,7 @@ impl<R: Read> Iterator for FlacFrames<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut frame = [0.0f64; MAX_CHANNELS];
 
-        // TODO: Replace with `dasp_frame::Frame::channels_mut` once stabilized.
-        for (i, f) in frame.iter_mut().enumerate().take(self.num_channels as usize) {
+        for (i, f) in frame.channels_mut().enumerate().take(self.num_channels as usize) {
             let raw_sample = match self.samples.next() {
                 Some(Ok(x)) => x,
                 Some(Err(e)) => return Some(Err(e)),
@@ -166,7 +164,7 @@ impl<R: Read> Iterator for WavFrames<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut frame = [0.0f64; MAX_CHANNELS];
 
-        for (i, f) in frame.iter_mut().enumerate().take(self.num_channels as usize) {
+        for (i, f) in frame.channels_mut().enumerate().take(self.num_channels as usize) {
             let normed_sample = match self.samples.next() {
                 Some(Ok(x)) => x,
                 Some(Err(e)) => return Some(Err(e)),
@@ -198,6 +196,10 @@ impl TestReader<File> {
         } else {
             panic!("unknown extension: {:?}", ext);
         }
+    }
+
+    pub fn into_signal(self) -> SignalFromIterator<Self> {
+        dasp::signal::from_iter(self)
     }
 }
 
