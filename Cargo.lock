@@ -50,9 +50,10 @@ source = "git+https://github.com/ruuda/claxon?rev=66bf34395d9285e896331c40effdae
 [[package]]
 name = "dasp"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_envelope",
+ "dasp_filter",
  "dasp_frame",
  "dasp_interpolate",
  "dasp_peak",
@@ -67,7 +68,7 @@ dependencies = [
 [[package]]
 name = "dasp_envelope"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_frame",
  "dasp_peak",
@@ -77,9 +78,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dasp_filter"
+version = "0.11.0"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
+dependencies = [
+ "dasp_frame",
+ "dasp_sample",
+]
+
+[[package]]
 name = "dasp_frame"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_sample",
 ]
@@ -87,7 +97,7 @@ dependencies = [
 [[package]]
 name = "dasp_interpolate"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_frame",
  "dasp_ring_buffer",
@@ -97,7 +107,7 @@ dependencies = [
 [[package]]
 name = "dasp_peak"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_frame",
  "dasp_sample",
@@ -106,12 +116,12 @@ dependencies = [
 [[package]]
 name = "dasp_ring_buffer"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 
 [[package]]
 name = "dasp_rms"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_frame",
  "dasp_ring_buffer",
@@ -121,14 +131,15 @@ dependencies = [
 [[package]]
 name = "dasp_sample"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 
 [[package]]
 name = "dasp_signal"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_envelope",
+ "dasp_filter",
  "dasp_frame",
  "dasp_interpolate",
  "dasp_peak",
@@ -141,7 +152,7 @@ dependencies = [
 [[package]]
 name = "dasp_slice"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_frame",
  "dasp_sample",
@@ -150,7 +161,7 @@ dependencies = [
 [[package]]
 name = "dasp_window"
 version = "0.11.0"
-source = "git+https://github.com/RustAudio/dasp?rev=39015e639118d281d660dfb5dd1bc26365318f46#39015e639118d281d660dfb5dd1bc26365318f46"
+source = "git+https://github.com/linclelinkpart5/dasp?branch=#145#e2198b48fd8c1e8b0b66036ec43a7257dc98ac13"
 dependencies = [
  "dasp_sample",
 ]
