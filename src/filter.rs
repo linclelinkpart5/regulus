@@ -1,10 +1,9 @@
 use std::f64::consts::PI;
 
 use dasp::filter::Coefficients;
+use dasp::frame::Frame;
 use dasp::signal::Signal;
-use dasp::signal::filter::SignalFilter;
-
-#[cfg(test)] use approx::AbsDiffEq;
+use dasp::signal::filter::{SignalFilter, FilteredSignal};
 
 #[derive(Copy, Clone, Debug)]
 enum Kind {
@@ -50,13 +49,51 @@ impl Kind {
     }
 }
 
+pub struct KWeightFilteredSignal<S>
+where
+    S: Signal,
+    S::Frame: Frame<Sample = f64>,
+{
+    signal: FilteredSignal<FilteredSignal<S>>,
+}
+
+impl<S> KWeightFilteredSignal<S>
+where
+    S: Signal,
+    S::Frame: Frame<Sample = f64>,
+{
+    pub fn new(signal: S, sample_rate: u32) -> Self {
+        let signal = signal
+            .filtered(Kind::Shelving.coefficients(sample_rate))
+            .filtered(Kind::HighPass.coefficients(sample_rate));
+
+        Self { signal }
+    }
+}
+
+impl<S> Signal for KWeightFilteredSignal<S>
+where
+    S: Signal,
+    S::Frame: Frame<Sample = f64>,
+{
+    type Frame = S::Frame;
+
+    fn next(&mut self) -> Self::Frame {
+        self.signal.next()
+    }
+
+    fn is_exhausted(&self) -> bool {
+        self.signal.is_exhausted()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use std::process::Command;
 
-    use approx::{abs_diff_eq, assert_abs_diff_eq};
+    use approx::abs_diff_eq;
 
     use crate::test_util::{TestUtil, WaveKind};
 
