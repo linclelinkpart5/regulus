@@ -8,8 +8,8 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-use dasp::Frame;
-use dasp::signal::FromIterator as SignalFromIterator;
+use sampara::Frame;
+use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 
 use crate::MAX_CHANNELS;
@@ -198,8 +198,8 @@ impl TestReader<File> {
         }
     }
 
-    pub fn into_signal(self) -> SignalFromIterator<Self> {
-        dasp::signal::from_iter(self)
+    pub fn into_signal(self) -> SignalFromFrames<Self, MAX_CHANNELS> {
+        sampara::signal::from_frames(self)
     }
 }
 

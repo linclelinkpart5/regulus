@@ -1,9 +1,8 @@
 use std::f64::consts::PI;
 
-use dasp::filter::Coefficients;
-use dasp::frame::Frame;
-use dasp::signal::Signal;
-use dasp::signal::filter::{SignalFilter, FilteredSignal};
+use sampara::biquad::Params;
+use sampara::frame::Frame;
+use sampara::signal::{Signal, Biquad};
 
 #[derive(Copy, Clone, Debug)]
 enum Kind {
@@ -11,7 +10,7 @@ enum Kind {
 }
 
 impl Kind {
-    fn coefficients(&self, sample_rate: u32) -> Coefficients<f64> {
+    fn coefficients(&self, sample_rate: u32) -> Params<f64> {
         let (f0, q) =
             match self {
                 Self::Shelving => (1681.974450955533, 0.7071752369554196),
@@ -45,45 +44,41 @@ impl Kind {
             }
         ;
 
-        Coefficients { a1, a2, b0, b1, b2, }
+        Params { a1, a2, b0, b1, b2, }
     }
 }
 
-pub struct KWeightFilteredSignal<S>
+pub struct KWeightFilteredSignal<S, const N: usize>
 where
-    S: Signal,
-    S::Frame: Frame<Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    signal: FilteredSignal<FilteredSignal<S>>,
+    signal: Biquad<Biquad<S, f64, N>, f64, N>,
 }
 
-impl<S> KWeightFilteredSignal<S>
+impl<S, const N: usize> KWeightFilteredSignal<S, N>
 where
-    S: Signal,
-    S::Frame: Frame<Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
     pub fn new(signal: S, sample_rate: u32) -> Self {
         let signal = signal
-            .filtered(Kind::Shelving.coefficients(sample_rate))
-            .filtered(Kind::HighPass.coefficients(sample_rate));
+            .biquad(Kind::Shelving.coefficients(sample_rate))
+            .biquad(Kind::HighPass.coefficients(sample_rate));
 
         Self { signal }
     }
 }
 
-impl<S> Signal for KWeightFilteredSignal<S>
+impl<S, const N: usize> Signal<N> for KWeightFilteredSignal<S, N>
 where
-    S: Signal,
-    S::Frame: Frame<Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
     type Frame = S::Frame;
 
-    fn next(&mut self) -> Self::Frame {
+    fn next(&mut self) -> Option<Self::Frame> {
         self.signal.next()
-    }
-
-    fn is_exhausted(&self) -> bool {
-        self.signal.is_exhausted()
     }
 }
 
@@ -119,7 +114,7 @@ mod tests {
         // not exact. As a result, in all of these tests the hard-coded
         // coefficients @ 48KHz do not exactly match those in ITU BS.1770, and
         // that is intentional.
-        let expected = Coefficients {
+        let expected = Params {
             a1: -1.6906592931824103,
             a2:  0.7324807742158501,
             b0:  1.5351248595869702,
@@ -130,7 +125,7 @@ mod tests {
 
         assert_eq!(expected, produced);
 
-        let expected = Coefficients {
+        let expected = Params {
             a1: -1.6636551132560204,
             a2:  0.7125954280732254,
             b0:  1.5308412300503478,
@@ -141,7 +136,7 @@ mod tests {
 
         assert_eq!(expected, produced);
 
-        let expected = Coefficients {
+        let expected = Params {
             a1: -0.2933807824149212,
             a2:  0.18687510604540827,
             b0:  1.3216235689299776,
@@ -152,7 +147,7 @@ mod tests {
 
         assert_eq!(expected, produced);
 
-        let expected = Coefficients {
+        let expected = Params {
             a1: -1.9222022306074886,
             a2:  0.9251177351168259,
             b0:  1.572227215091279,
@@ -163,7 +158,7 @@ mod tests {
 
         assert_eq!(expected, produced);
 
-        let expected = Coefficients {
+        let expected = Params {
             a1: -1.9900474548339797,
             a2:  0.9900722503662099,
             b0:  1.0,
@@ -210,12 +205,12 @@ mod tests {
         const FREQ: u32 = 997;
 
         let frames = TestUtil::sox_eval_samples(&mut TestUtil::sox_gen_wave_cmd(RATE, KIND, FREQ));
-        let signal = dasp::signal::from_iter(frames);
+        let signal = sampara::signal::from_frames(frames);
 
         let filtered_frames = signal
-            .filtered(Kind::Shelving.coefficients(RATE))
-            .filtered(Kind::HighPass.coefficients(RATE))
-            .until_exhausted()
+            .biquad(Kind::Shelving.coefficients(RATE))
+            .biquad(Kind::HighPass.coefficients(RATE))
+            .into_iter()
             .collect::<Vec<_>>();
 
         let fx = TestUtil::sox_eval_samples(&mut sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));

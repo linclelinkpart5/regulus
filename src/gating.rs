@@ -2,27 +2,27 @@
 use std::iter::FusedIterator;
 
 use circular_queue::CircularQueue;
-use dasp::Frame;
+use sampara::Frame;
 
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowerIter<I, F>
+pub struct GatedPowerIter<I, F, const N: usize>
 where
     I: Iterator<Item = F>,
-    F: Frame<Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
     frames: I,
     frames_per_delta: usize,
     gate_frame_queue: CircularQueue<F>,
 }
 
-impl<I, F> GatedPowerIter<I, F>
+impl<I, F, const N: usize> GatedPowerIter<I, F, N>
 where
     I: Iterator<Item = F>,
-    F: Frame<Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
     pub fn new(frames: I, sample_rate: u32) -> Self {
         // Number of frames to read each iteration once the queue is filled.
@@ -41,10 +41,10 @@ where
     }
 }
 
-impl<I, F> Iterator for GatedPowerIter<I, F>
+impl<I, F, const N: usize> Iterator for GatedPowerIter<I, F, N>
 where
     I: Iterator<Item = F>,
-    F: Frame<Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
     type Item = I::Item;
 
@@ -86,20 +86,20 @@ where
         // Calculate the mean squares of the current circular buffer.
         let mut total_energy = F::EQUILIBRIUM;
         for frame in self.gate_frame_queue.iter() {
-            let energy = frame.mul_amp(*frame);
-            total_energy = total_energy.add_amp(energy);
+            let energy = frame.mul_frame(frame.into_float_frame());
+            total_energy = total_energy.add_frame(energy.into_signed_frame());
         }
 
-        let power = total_energy.scale_amp(1.0 / self.gate_frame_queue.capacity() as f64);
+        let power = total_energy.mul_amp(1.0 / self.gate_frame_queue.capacity() as f64);
 
         Some(power)
     }
 }
 
-impl<I, F> FusedIterator for GatedPowerIter<I, F>
+impl<I, F, const N: usize> FusedIterator for GatedPowerIter<I, F, N>
 where
     I: Iterator<Item = F>,
-    F: Frame<Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {}
 
 #[cfg(test)]
