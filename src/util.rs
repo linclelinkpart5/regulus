@@ -12,6 +12,21 @@ impl Util {
         -0.691 + 10.0 * x.log10()
     }
 
+    /// Given the mean squares (powers) of an input signal and a set of
+    /// per-channel weights, calculates the weighted loudness.
+    ///
+    /// Note that this will produce a single scalar: the loudness across ALL
+    /// input channels.
+    pub fn loudness<F, W, const N: usize>(mean_sq: F, weights: W) -> f64
+    where
+        F: Frame<N, Sample = f64>,
+        W: Frame<N, Sample = f64>,
+    {
+        let zipped: F = mean_sq.zip_apply(weights, |x, w| x * w);
+
+        Util::lufs(zipped.channels().sum())
+    }
+
     pub fn lufs_hist(count: u64, sum: f64, reference: f64) -> f64 {
         if count == 0 { reference }
         else { Util::lufs(sum / count as f64) }
