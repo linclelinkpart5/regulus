@@ -12,7 +12,7 @@ pub(crate) mod test_util;
 
 pub use constants::MAX_CHANNELS;
 
-// pub use filter::FilteredSamples;
+pub use filter::KWeightFilteredSignal;
 pub use gating::GatedPowerIter;
 pub use loudness::Loudness;
 
@@ -52,30 +52,38 @@ pub use loudness::Loudness;
 mod tests {
     use super::*;
 
+    use std::f64::consts::PI;
+
     use sampara::signal::Signal;
 
     use approx::assert_abs_diff_eq;
 
     #[test]
     fn nominal_frequency_reading() {
-        // // As per the ITU BS.1770 spec:
-        // // If a 0 dB FS, 997 Hz sine wave is applied to the left, center, or right channel input,
-        // // the indicated loudness will equal -3.01 LKFS.
-        // let sample_rate: u32 = 48000;
+        // As per the ITU BS.1770 spec:
+        // If a 0 dB FS, 997 Hz sine wave is applied to the left, center, or right channel input,
+        // the indicated loudness will equal -3.01 LKFS.
+        const SAMPLE_RATE: f64 = 48000.0;
+        const SINE_HZ: f64 = 997.0;
+        const STEP: f64 = SINE_HZ / SAMPLE_RATE;
 
-        // let mut mono_raw_signal = sampara::signal::rate(48000.0).const_hz(997.0).sine();
-        // let raw_signal =
-        //     std::iter::from_fn(move || {
-        //         let x = mono_raw_signal.next();
-        //         Some([x, 0.0, 0.0, 0.0, 0.0])
-        //     })
-        //     .take(sample_rate as usize * 10)
-        // ;
+        // Quick and easy way to generate a sine wave.
+        // TODO: Replace with `sampara` wavegen once available.
+        let mut phase: f64 = 0.0;
+        let signal = sampara::signal::from_fn(move || {
+            phase = (phase + STEP) % 1.0;
+            let y = (2.0 * PI * phase).sin();
+            Some([y, 0.0, 0.0, 0.0, 0.0])
+        });
 
-        // let filtered_signal = FilteredSamples::new(raw_signal, sample_rate);
-        // let gated_channel_powers_iter = GatedPowerIter::new(filtered_signal, sample_rate);
-        // let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter);
+        let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
+        let gated_channel_powers_iter = GatedPowerIter::new(
+            filtered_signal.into_iter()
+                .take((SAMPLE_RATE as usize) * 2),
+            SAMPLE_RATE as u32,
+        );
+        let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter);
 
-        // assert_abs_diff_eq!(loudness, -3.0102799213963327, epsilon = 1e-9);
+        assert_abs_diff_eq!(loudness, -3.010258819171608, epsilon = 1e-9);
     }
 }
