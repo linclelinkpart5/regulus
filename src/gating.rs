@@ -1,30 +1,27 @@
-
-use std::iter::FusedIterator;
-
 use circular_queue::CircularQueue;
-use sampara::Frame;
+use sampara::{Frame, Signal};
 
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowerIter<I, F, const N: usize>
+pub struct GatedPowers<S, const N: usize>
 where
-    I: Iterator<Item = F>,
-    F: Frame<N, Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    frames: I,
+    frames: S,
     frames_per_delta: usize,
-    gate_frame_queue: CircularQueue<F>,
+    gate_frame_queue: CircularQueue<S::Frame>,
 }
 
-impl<I, F, const N: usize> GatedPowerIter<I, F, N>
+impl<S, const N: usize> GatedPowers<S, N>
 where
-    I: Iterator<Item = F>,
-    F: Frame<N, Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    pub fn new(frames: I, sample_rate: u32) -> Self {
+    pub fn new(frames: S, sample_rate: u32) -> Self {
         // Number of frames to read each iteration once the queue is filled.
         let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
 
@@ -33,7 +30,7 @@ where
 
         let gate_frame_queue = CircularQueue::with_capacity(frames_per_gate);
 
-        Self {
+        GatedPowers {
             frames,
             frames_per_delta,
             gate_frame_queue,
@@ -41,14 +38,14 @@ where
     }
 }
 
-impl<I, F, const N: usize> Iterator for GatedPowerIter<I, F, N>
+impl<S, const N: usize> Signal<N> for GatedPowers<S, N>
 where
-    I: Iterator<Item = F>,
-    F: Frame<N, Sample = f64>,
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    type Item = I::Item;
+    type Frame = S::Frame;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Frame> {
         let is_empty = self.gate_frame_queue.is_empty();
         let is_full = self.gate_frame_queue.is_full();
 
@@ -84,7 +81,7 @@ where
         }
 
         // Calculate the mean squares of the current circular buffer.
-        let mut total_energy = F::EQUILIBRIUM;
+        let mut total_energy = S::Frame::EQUILIBRIUM;
         for frame in self.gate_frame_queue.iter() {
             let energy = frame.mul_frame(frame.into_float_frame());
             total_energy = total_energy.add_frame(energy.into_signed_frame());
@@ -96,12 +93,6 @@ where
     }
 }
 
-impl<I, F, const N: usize> FusedIterator for GatedPowerIter<I, F, N>
-where
-    I: Iterator<Item = F>,
-    F: Frame<N, Sample = f64>,
-{}
-
 #[cfg(test)]
 mod tests {
     // use super::*;
@@ -112,7 +103,7 @@ mod tests {
     //     const AMPLITUDES: [f64; MAX_CHANNELS] = [1.0, 1.0, 1.0, 1.0, 1.0];
 
     //     let sample_iter = WaveGen::new(WaveKind::Sawtooth, 48000, FREQUENCIES, AMPLITUDES);
-    //     let mut gpi = GatedPowerIter::new(sample_iter, 48000);
+    //     let mut gpi = GatedPowers::new(sample_iter, 48000);
 
     //     let expected_results = [
     //         // [0.33333379629629456, 0.3334000000000141, 0.3333337962962951, 0.3333351851851806, 0.33343750000000755],
@@ -144,7 +135,7 @@ mod tests {
     //     }
 
     //     let sample_iter = WaveGen::new(WaveKind::Square, 48000, FREQUENCIES, AMPLITUDES);
-    //     let mut gpi = GatedPowerIter::new(sample_iter, 48000);
+    //     let mut gpi = GatedPowers::new(sample_iter, 48000);
 
     //     let expected_results = [
     //         [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -168,7 +159,7 @@ mod tests {
     //     }
 
     //     let sample_iter = WaveGen::new(WaveKind::Triangle, 48000, FREQUENCIES, AMPLITUDES);
-    //     let mut gpi = GatedPowerIter::new(sample_iter, 48000);
+    //     let mut gpi = GatedPowers::new(sample_iter, 48000);
 
     //     let expected_results = [
     //         // [0.3333351851851775, 0.33360000000000145, 0.33333518518517663, 0.33334074074073505, 0.33375000000000676],
@@ -200,7 +191,7 @@ mod tests {
     //     }
 
     //     let sample_iter = WaveGen::new(WaveKind::Sine, 48000, FREQUENCIES, AMPLITUDES);
-    //     let mut gpi = GatedPowerIter::new(sample_iter, 48000);
+    //     let mut gpi = GatedPowers::new(sample_iter, 48000);
 
     //     let expected_results = [
     //         // [0.4999999999999992, 0.5, 0.4999999999999989, 0.5000000000000002, 0.5000000000000003],

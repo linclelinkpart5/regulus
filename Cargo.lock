@@ -182,9 +182,9 @@ dependencies = [
 
 [[package]]
 name = "sampara"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95bf43b82ba2dde00fba9209235ac63167fb586f74c1a038e7148511557a62fe"
+checksum = "e6d95106ecf8b500be672cc21e41ca1067d00f19a4fbf1dbf6bc467e77fbb169"
 dependencies = [
  "num-traits",
 ]

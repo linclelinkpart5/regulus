@@ -13,7 +13,7 @@ pub(crate) mod test_util;
 pub use constants::MAX_CHANNELS;
 
 pub use filter::KWeightFilteredSignal;
-pub use gating::GatedPowerIter;
+pub use gating::GatedPowers;
 pub use loudness::Loudness;
 
 // #[derive(Clone, Copy, Debug)]
@@ -74,15 +74,11 @@ mod tests {
             phase = (phase + STEP) % 1.0;
             let y = (2.0 * PI * phase).sin();
             Some([y, 0.0, 0.0, 0.0, 0.0])
-        });
+        }).take((SAMPLE_RATE as usize) * 2);
 
         let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
-        let gated_channel_powers_iter = GatedPowerIter::new(
-            filtered_signal.into_iter()
-                .take((SAMPLE_RATE as usize) * 2),
-            SAMPLE_RATE as u32,
-        );
-        let loudness = Loudness::from_gated_channel_powers(gated_channel_powers_iter);
+        let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);
+        let loudness = Loudness::from_gated_channel_powers(gated_powers.into_iter());
 
         assert_abs_diff_eq!(loudness, -3.010258819171608, epsilon = 1e-9);
     }
