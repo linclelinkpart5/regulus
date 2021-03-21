@@ -78,7 +78,7 @@ mod tests {
 
         let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
         let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);
-        let loudness = Loudness::from_gated_channel_powers(gated_powers.into_iter());
+        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
         assert_abs_diff_eq!(loudness, -3.010258819171608, epsilon = 1e-9);
     }
