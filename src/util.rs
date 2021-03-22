@@ -81,7 +81,9 @@ impl Util {
 mod tests {
     use super::*;
 
-    use sampara::Signal;
+    use crate::test_util::TestUtil;
+
+    use sampara::{Signal, signal};
 
     use approx::assert_relative_eq;
 
@@ -106,67 +108,44 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn root_mean_sq() {
-    //     const SAMPLE_RATE: usize = 100000;
-    //     const AMPLITUDES: [f64; MAX_CHANNELS] = [0.2, 0.4, 0.6, 0.8, 1.0];
-    //     const EPSILON: f64 = 1e-8;
+    #[test]
+    fn root_mean_sq() {
+        const SAMPLE_RATE: usize = 100000;
+        const AMPLITUDES: [f64; 5] = [0.2, 0.4, 0.6, 0.8, 1.0];
+        const EPSILON: f64 = 1e-8;
 
-    //     // Full flat signal.
-    //     let signal =
-    //         std::iter::repeat(AMPLITUDES)
-    //         .take(SAMPLE_RATE)
-    //     ;
+        // Full flat signal.
+        let signal = signal::constant(AMPLITUDES).take(SAMPLE_RATE);
 
-    //     let produced = Util::root_mean_sq(signal);
-    //     let expected = AMPLITUDES;
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES;
 
-    //     for ch in 0..MAX_CHANNELS {
-    //         let e = expected[ch];
-    //         let p = produced[ch];
-    //         assert_relative_eq!(e, p, epsilon=EPSILON);
-    //     }
+        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
+            assert_relative_eq!(p, e, epsilon=EPSILON);
+        }
 
-    //     // Sine wave.
-    //     let mut mono_signal = sampara::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).sine();
-    //     let signal =
-    //         std::iter::from_fn(move || {
-    //             let mut s = AMPLITUDES;
-    //             let x = mono_signal.next();
-    //             s.iter_mut().for_each(|e| *e *= x);
-    //             Some(s)
-    //         })
-    //         .take(SAMPLE_RATE)
-    //     ;
+        // Sine wave.
+        let signal = TestUtil::gen_sine_signal(SAMPLE_RATE as f64, 1000.0)
+            .map(|x| AMPLITUDES.mul_amp(x))
+            .take(SAMPLE_RATE);
 
-    //     let produced = Util::root_mean_sq(signal);
-    //     let expected = Util::scale(&AMPLITUDES, 1.0 / 2.0f64.sqrt());
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES.mul_amp(1.0 / 2.0f64.sqrt());
 
-    //     for ch in 0..MAX_CHANNELS {
-    //         let e = expected[ch];
-    //         let p = produced[ch];
-    //         assert_relative_eq!(e, p, epsilon=EPSILON);
-    //     }
+        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
+            assert_relative_eq!(p, e, epsilon=EPSILON);
+        }
 
-    //     // Square wave.
-    //     let mut mono_signal = sampara::signal::rate(SAMPLE_RATE as f64).const_hz(1000.0).square();
-    //     let signal =
-    //         std::iter::from_fn(move || {
-    //             let mut s = AMPLITUDES;
-    //             let x = mono_signal.next();
-    //             s.iter_mut().for_each(|e| *e *= x);
-    //             Some(s)
-    //         })
-    //         .take(SAMPLE_RATE)
-    //     ;
+        // Square wave.
+        let signal = TestUtil::gen_square_signal(SAMPLE_RATE as f64, 1000.0)
+            .map(|x| AMPLITUDES.mul_amp(x))
+            .take(SAMPLE_RATE);
 
-    //     let produced = Util::root_mean_sq(signal);
-    //     let expected = AMPLITUDES;
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES;
 
-    //     for ch in 0..MAX_CHANNELS {
-    //         let e = expected[ch];
-    //         let p = produced[ch];
-    //         assert_relative_eq!(e, p, epsilon=EPSILON);
-    //     }
-    // }
+        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
+            assert_relative_eq!(p, e, epsilon=EPSILON);
+        }
+    }
 }
