@@ -1,4 +1,4 @@
-// #[cfg(test)] #[macro_use] extern crate approx;
+#![feature(associated_type_bounds)]
 
 pub mod constants;
 pub mod filter;
@@ -20,7 +20,7 @@ pub use loudness::Loudness;
 mod tests {
     use super::*;
 
-    use std::f64::consts::PI;
+    use crate::test_util::TestUtil;
 
     use sampara::signal::Signal;
 
@@ -32,17 +32,10 @@ mod tests {
         // If a 0 dB FS, 997 Hz sine wave is applied to the left, center, or right channel input,
         // the indicated loudness will equal -3.01 LKFS.
         const SAMPLE_RATE: f64 = 48000.0;
-        const SINE_HZ: f64 = 997.0;
-        const STEP: f64 = SINE_HZ / SAMPLE_RATE;
+        const SINE_HZS: [f64; 5] = [997.0, 0.0, 0.0, 0.0, 0.0];
 
-        // Quick and easy way to generate a sine wave.
-        // TODO: Replace with `sampara` wavegen once available.
-        let mut phase: f64 = 0.0;
-        let signal = sampara::signal::from_fn(move || {
-            phase = (phase + STEP) % 1.0;
-            let y = (2.0 * PI * phase).sin();
-            Some([y, 0.0, 0.0, 0.0, 0.0])
-        }).take((SAMPLE_RATE as usize) * 2);
+        let signal = TestUtil::gen_sine_signal(SAMPLE_RATE, SINE_HZS)
+            .take((SAMPLE_RATE as usize) * 2);
 
         let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
         let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);

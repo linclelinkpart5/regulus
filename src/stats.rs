@@ -103,18 +103,18 @@ mod tests {
         validate(INITIAL, 3, stats);
 
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
-        validate([1.3 / 4.0, 1.6 / 4.0, 1.9 / 4.0, 2.2 / 4.0, 2.5 / 4.0], 4, stats);
+        validate([1.3, 1.6, 1.9, 2.2, 2.5].mul_amp(1.0 / 4.0), 4, stats);
 
         stats.add([-1.0, -0.5, 0.0, 0.5, 1.0]);
-        validate([0.3 / 5.0, 1.1 / 5.0, 1.9 / 5.0, 2.7 / 5.0, 3.5 / 5.0], 5, stats);
+        validate([0.3, 1.1, 1.9, 2.7, 3.5].mul_amp(1.0 / 5.0), 5, stats);
 
         stats.add([0.0, 0.2, 0.4, 0.6, 0.8]);
-        validate([0.3 / 6.0, 1.3 / 6.0, 2.3 / 6.0, 3.3 / 6.0, 4.3 / 6.0], 6, stats);
+        validate([0.3, 1.3, 2.3, 3.3, 4.3].mul_amp(1.0 / 6.0), 6, stats);
 
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
         stats.add([1.0, 1.0, 1.0, 1.0, 1.0]);
-        validate([3.3 / 9.0, 4.3 / 9.0, 5.3 / 9.0, 6.3 / 9.0, 7.3 / 9.0], 9, stats);
+        validate([3.3, 4.3, 5.3, 6.3, 7.3].mul_amp(1.0 / 9.0), 9, stats);
     }
 
     #[test]
@@ -128,10 +128,10 @@ mod tests {
         stats_b.add([0.06, 0.07, 0.08, 0.09, 0.10]);
 
         let merged = stats_a.merge(stats_b);
-        validate([0.77 / 4.0, 0.99 / 4.0, 1.21 / 4.0, 1.43 / 4.0, 1.65 / 4.0], 4, merged);
+        validate([0.77, 0.99, 1.21, 1.43, 1.65].mul_amp(1.0 / 4.0), 4, merged);
 
         let merged = stats_b.merge(stats_a);
-        validate([0.77 / 4.0, 0.99 / 4.0, 1.21 / 4.0, 1.43 / 4.0, 1.65 / 4.0], 4, merged);
+        validate([0.77, 0.99, 1.21, 1.43, 1.65].mul_amp(1.0 / 4.0), 4, merged);
 
         let stats_b = Stats::new();
 

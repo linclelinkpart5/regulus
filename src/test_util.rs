@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use std::f64::consts::PI;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -8,7 +9,7 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-use sampara::Frame;
+use sampara::{Frame, Signal};
 use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 
@@ -365,6 +366,27 @@ impl TestUtil {
         );
 
         (flat_samples, sample_rate, num_channels)
+    }
+
+    /// Quick and easy way to generate a sine wave.
+    // TODO: Replace with `sampara` wavegen once available.
+    pub fn gen_sine_signal<F, const N: usize>(sample_rate: f64, hz: F)
+        -> impl Signal<N, Frame = F>
+    where
+        F: Frame<N, Sample = f64>,
+    {
+        let step: F = hz.mul_amp(1.0 / sample_rate);
+
+        // Quick and easy way to generate a sine wave.
+        // TODO: Replace with `sampara` wavegen once available.
+        let mut phase: F = Frame::EQUILIBRIUM;
+        let signal = sampara::signal::from_fn(move || {
+            phase.zip_transform(step, |p, s| (p + s) % 1.0);
+            let y = phase.apply(|x| (2.0 * PI * x).sin());
+            Some(y)
+        });
+
+        signal
     }
 }
 
