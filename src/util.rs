@@ -79,32 +79,32 @@ impl Util {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
 
-    // use sampara::Signal;
+    use sampara::Signal;
 
-    // use approx::assert_relative_eq;
+    use approx::assert_relative_eq;
 
-    // #[test]
-    // fn util_ms_to_samples() {
-    //     let inputs_and_expected = vec![
-    //         ((100, 44100), 4410),
-    //         ((100, 44123), 4412),
-    //         ((1, 44100), 44),
-    //         ((1, 44600), 45),
-    //         ((1, 44500), 45),
-    //         ((1, 44499), 44),
-    //         ((487, 12345), 6012),
-    //         ((489, 12345), 6037),
-    //     ];
+    #[test]
+    fn ms_to_samples() {
+        let inputs_and_expected = vec![
+            ((100, 44100), 4410),
+            ((100, 44123), 4412),
+            ((1, 44100), 44),
+            ((1, 44600), 45),
+            ((1, 44500), 45),
+            ((1, 44499), 44),
+            ((487, 12345), 6012),
+            ((489, 12345), 6037),
+        ];
 
-    //     for (inputs, expected) in inputs_and_expected {
-    //         let (ms, sample_rate) = inputs;
-    //         let produced = Util::ms_to_samples(ms, sample_rate);
+        for (inputs, expected) in inputs_and_expected {
+            let (ms, sample_rate) = inputs;
+            let produced = Util::ms_to_samples(ms, sample_rate);
 
-    //         assert_eq!(expected, produced)
-    //     }
-    // }
+            assert_eq!(expected, produced)
+        }
+    }
 
     // #[test]
     // fn root_mean_sq() {
