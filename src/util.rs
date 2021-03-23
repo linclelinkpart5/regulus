@@ -125,7 +125,7 @@ mod tests {
         }
 
         // Sine wave.
-        let signal = TestUtil::gen_sine_signal(SAMPLE_RATE as f64, 1000.0)
+        let signal = TestUtil::gen_sine_wave(SAMPLE_RATE as f64, 1000.0)
             .map(|x| AMPLITUDES.mul_amp(x))
             .take(SAMPLE_RATE);
 
@@ -137,7 +137,7 @@ mod tests {
         }
 
         // Square wave.
-        let signal = TestUtil::gen_square_signal(SAMPLE_RATE as f64, 1000.0)
+        let signal = TestUtil::gen_square_wave(SAMPLE_RATE as f64, 1000.0)
             .map(|x| AMPLITUDES.mul_amp(x))
             .take(SAMPLE_RATE);
 
@@ -146,6 +146,20 @@ mod tests {
 
         for (p, e) in produced.into_channels().zip(expected.into_channels()) {
             assert_relative_eq!(p, e, epsilon=EPSILON);
+        }
+
+        // Sawtooth wave.
+        let signal = TestUtil::gen_sawtooth_wave(SAMPLE_RATE as f64, 1000.0)
+            .map(|x| AMPLITUDES.mul_amp(x))
+            .take(SAMPLE_RATE);
+
+        let produced = Util::root_mean_sq(signal);
+        let expected = AMPLITUDES.mul_amp(1.0 / 3.0f64.sqrt());
+
+        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
+            // TODO: This check isn't as accurate as the others, seems to have
+            //       some floating-point error.
+            assert_relative_eq!(p, e, epsilon=1e-3);
         }
     }
 }

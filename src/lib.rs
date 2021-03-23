@@ -34,13 +34,13 @@ mod tests {
         const SAMPLE_RATE: f64 = 48000.0;
         const SINE_HZS: [f64; 5] = [997.0, 0.0, 0.0, 0.0, 0.0];
 
-        let signal = TestUtil::gen_sine_signal(SAMPLE_RATE, SINE_HZS)
+        let signal = TestUtil::gen_sine_wave(SAMPLE_RATE, SINE_HZS)
             .take((SAMPLE_RATE as usize) * 2);
 
         let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
         let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);
         let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
-        assert_abs_diff_eq!(loudness, -3.010258819171608, epsilon = 1e-9);
+        assert_abs_diff_eq!(loudness, -3.010251969611668, epsilon = 1e-9);
     }
 }

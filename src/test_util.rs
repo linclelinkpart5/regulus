@@ -29,7 +29,7 @@ impl WaveKind {
                 if x < 0.5 { 1.0 }
                 else { -1.0 }
             },
-            Self::Sawtooth => x * -2.0 + 1.0,
+            Self::Sawtooth => 2.0 * x - 1.0,
         }
     }
 
@@ -379,7 +379,7 @@ impl TestUtil {
 
     /// Quick and easy way to generate a sine wave.
     // TODO: Replace with `sampara` wavegen once available.
-    pub fn gen_signal<F, const N: usize>(sample_rate: f64, hz: F, kind: WaveKind)
+    pub fn gen_wave<F, const N: usize>(sample_rate: f64, hz: F, kind: WaveKind)
         -> impl Signal<N, Frame = F>
     where
         F: Frame<N, Sample = f64>,
@@ -390,36 +390,37 @@ impl TestUtil {
         // TODO: Replace with `sampara` wavegen once available.
         let mut phase: F = Frame::EQUILIBRIUM;
         let signal = sampara::signal::from_fn(move || {
+            let x = phase;
             phase.zip_transform(step, |p, s| (p + s) % 1.0);
-            let y = phase.apply(|x| kind.calc(x));
+            let y = x.apply(|i| kind.calc(i));
             Some(y)
         });
 
         signal
     }
 
-    pub fn gen_sine_signal<F, const N: usize>(sample_rate: f64, hz: F)
+    pub fn gen_sine_wave<F, const N: usize>(sample_rate: f64, hz: F)
         -> impl Signal<N, Frame = F>
     where
         F: Frame<N, Sample = f64>,
     {
-        Self::gen_signal(sample_rate, hz, WaveKind::Sine)
+        Self::gen_wave(sample_rate, hz, WaveKind::Sine)
     }
 
-    pub fn gen_square_signal<F, const N: usize>(sample_rate: f64, hz: F)
+    pub fn gen_square_wave<F, const N: usize>(sample_rate: f64, hz: F)
         -> impl Signal<N, Frame = F>
     where
         F: Frame<N, Sample = f64>,
     {
-        Self::gen_signal(sample_rate, hz, WaveKind::Square)
+        Self::gen_wave(sample_rate, hz, WaveKind::Square)
     }
 
-    pub fn gen_sawtooth_signal<F, const N: usize>(sample_rate: f64, hz: F)
+    pub fn gen_sawtooth_wave<F, const N: usize>(sample_rate: f64, hz: F)
         -> impl Signal<N, Frame = F>
     where
         F: Frame<N, Sample = f64>,
     {
-        Self::gen_signal(sample_rate, hz, WaveKind::Sawtooth)
+        Self::gen_wave(sample_rate, hz, WaveKind::Sawtooth)
     }
 }
 
