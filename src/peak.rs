@@ -1,42 +1,46 @@
 //! Utilities for sample and true peak analysis, according to the BS.1770 spec.
 
-use crate::constants::MAX_CHANNELS;
+use sampara::{Frame, Signal};
 
-pub struct SamplePeakIter<I>
+pub struct RunningPeak<S, const N: usize>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    sample_iter: I,
-    peak_per_channel: [f64; MAX_CHANNELS],
+    frames: S,
+
+    // This stores the highest absolute value peak for each channel that has
+    // been seen so far.
+    peaks: S::Frame,
 }
 
-impl<I> SamplePeakIter<I>
+impl<S, const N: usize> RunningPeak<S, N>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    pub fn new(sample_iter: I) -> Self {
+    pub fn new(frames: S) -> Self {
         Self {
-            sample_iter,
-            peak_per_channel: [0.0f64; MAX_CHANNELS],
+            frames,
+            peaks: Frame::EQUILIBRIUM,
         }
     }
 }
 
-impl<I> Iterator for SamplePeakIter<I>
+impl<S, const N: usize> Signal<N> for RunningPeak<S, N>
 where
-    I: Iterator<Item = [f64; MAX_CHANNELS]>
+    S: Signal<N>,
+    S::Frame: Frame<N, Sample = f64>,
 {
-    type Item = [f64; MAX_CHANNELS];
+    type Frame = S::Frame;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let sample = self.sample_iter.next()?;
+    fn next(&mut self) -> Option<Self::Frame> {
+        let frame = self.frames.next()?;
 
-        for ch in 0..MAX_CHANNELS {
-            self.peak_per_channel[ch] = self.peak_per_channel[ch].max(sample[ch].abs());
-        }
+        self.peaks.zip_transform(frame, |p, x| p.max(x.abs()));
 
-        // Pass through the original sample.
-        Some(sample)
+        // Pass through the original frame.
+        Some(frame)
     }
 }
 
@@ -44,66 +48,59 @@ where
 mod tests {
     use super::*;
 
+    use sampara::signal;
+
     use approx::assert_abs_diff_eq;
 
     #[test]
-    fn sample_peak_iter() {
-        let samples = [
+    fn running_peak() {
+        let frames = [
             [0.0, 0.0, 0.0, 0.0, 0.0],
             [-0.1, 0.2, -0.3, 0.4, -0.5],
         ];
 
-        let mut original_iter = samples.iter().copied();
-        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
+        let mut original_iter = frames.iter().copied();
+        let mut running_peak = RunningPeak::new(
+            signal::from_frames(frames.iter().copied())
+        );
 
-        while let Some(produced) = sample_peak_iter.next() {
+        while let Some(produced) = running_peak.next() {
             let expected = original_iter.next().unwrap();
-            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
+            for (e, p) in expected.into_channels().zip(produced.into_channels()) {
+                assert_abs_diff_eq!(e, p);
+            }
         }
 
         let expected = [0.1, 0.2, 0.3, 0.4, 0.5];
-        for ch in 0..MAX_CHANNELS {
-            let e = expected[ch];
-            let p = sample_peak_iter.peak_per_channel[ch];
+        for (e, p) in expected.into_channels().zip(running_peak.peaks.into_channels()) {
             assert_abs_diff_eq!(e, p);
         }
 
-        let samples = [
+        let frames = [
             [0.1, 0.2, 0.3, 0.4, 0.5],
             [-1.0, 1.0, -1.0, 1.0, -1.0],
         ];
 
-        let mut original_iter = samples.iter().copied();
-        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
+        let mut original_iter = frames.iter().copied();
+        let mut running_peak = RunningPeak::new(
+            signal::from_frames(frames.iter().copied())
+        );
 
-        while let Some(produced) = sample_peak_iter.next() {
+        while let Some(produced) = running_peak.next() {
             let expected = original_iter.next().unwrap();
-            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
+            for (e, p) in expected.into_channels().zip(produced.into_channels()) {
+                assert_abs_diff_eq!(e, p);
+            }
         }
 
         let expected = [1.0, 1.0, 1.0, 1.0, 1.0];
-        for ch in 0..MAX_CHANNELS {
-            let e = expected[ch];
-            let p = sample_peak_iter.peak_per_channel[ch];
+        for (e, p) in expected.into_channels().zip(running_peak.peaks.into_channels()) {
             assert_abs_diff_eq!(e, p);
         }
 
-        let samples = [
-        ];
+        let mut running_peak = RunningPeak::new(signal::empty::<f64, 1>());
 
-        let mut original_iter = samples.iter().copied();
-        let mut sample_peak_iter = SamplePeakIter::new(samples.iter().copied());
-
-        while let Some(produced) = sample_peak_iter.next() {
-            let expected = original_iter.next().unwrap();
-            for ch in 0..MAX_CHANNELS { assert_abs_diff_eq!(expected[ch], produced[ch]); }
-        }
-
-        let expected = [0.0, 0.0, 0.0, 0.0, 0.0];
-        for ch in 0..MAX_CHANNELS {
-            let e = expected[ch];
-            let p = sample_peak_iter.peak_per_channel[ch];
-            assert_abs_diff_eq!(e, p);
-        }
+        assert_eq!(running_peak.next(), None);
+        assert_eq!(running_peak.peaks, 0.0);
     }
 }
