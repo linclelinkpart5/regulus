@@ -5,8 +5,7 @@ authors = ["Mark LeMoine <linclelinkpart5@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-circular-queue = "0.2.6"
-sampara = { version = "*", features = ["biquad"] }
+sampara = { path = "../sampara" }
 strum = "0.15.0"
 
 [dev-dependencies]

@@ -53,7 +53,7 @@ where
     S: Signal<N>,
     S::Frame: Frame<N, Sample = f64>,
 {
-    signal: Biquad<Biquad<S, f64, N>, f64, N>,
+    signal: Biquad<Biquad<S, N>, N>,
 }
 
 impl<S, const N: usize> KWeightFilteredSignal<S, N>

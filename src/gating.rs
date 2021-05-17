@@ -1,40 +1,41 @@
-use circular_queue::CircularQueue;
 use sampara::{Frame, Signal};
+use sampara::signal::{Ms, StepBy};
 
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowers<S, const N: usize>
+pub struct GatedPowers<S, const N: usize>(StepBy<Ms<S, Vec<S::Frame>, N>, N>)
 where
     S: Signal<N>,
     S::Frame: Frame<N, Sample = f64>,
-{
-    frames: S,
-    frames_per_delta: usize,
-    gate_frame_queue: CircularQueue<S::Frame>,
-}
+;
 
 impl<S, const N: usize> GatedPowers<S, N>
 where
     S: Signal<N>,
     S::Frame: Frame<N, Sample = f64>,
 {
-    pub fn new(frames: S, sample_rate: u32) -> Self {
-        // Number of frames to read each iteration once the queue is filled.
+    pub fn new(signal: S, sample_rate: u32) -> Self {
+        // Calculate the gate length, in frames.
+        // This will in turn determine the length of the mean squares buffer.
+        let gate_buffer_len = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
+
+        // Number of frames to add at a time for each iteration after the first.
+        // This be the number of steps to advance the mean squares iterator for
+        // each iteration (i.e. the "step-by" amount).
         let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
 
-        // Gate queue size, in frames.
-        let frames_per_gate = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
+        let buffer = vec![Frame::EQUILIBRIUM; gate_buffer_len];
 
-        let gate_frame_queue = CircularQueue::with_capacity(frames_per_gate);
+        let ms_signal = signal.ms_fill(buffer);
 
-        GatedPowers {
-            frames,
-            frames_per_delta,
-            gate_frame_queue,
-        }
+        // We want to advance the mean squares iterator by the delta amount for
+        // each gated iteration.
+        let gp_signal = ms_signal.step_by(frames_per_delta);
+
+        GatedPowers(gp_signal)
     }
 }
 
@@ -46,50 +47,7 @@ where
     type Frame = S::Frame;
 
     fn next(&mut self) -> Option<Self::Frame> {
-        let is_empty = self.gate_frame_queue.is_empty();
-        let is_full = self.gate_frame_queue.is_full();
-
-        match (is_empty, is_full) {
-            // Pre-initialized state, the queue needs to be filled.
-            (true, false) => {
-                while !self.gate_frame_queue.is_full() {
-                    // If there are no more frames to read, the queue cannot be
-                    // filled, so this iterator is now empty.
-                    let frame = self.frames.next()?;
-                    self.gate_frame_queue.push(frame);
-                }
-            },
-
-            // Working state, attempt to read and push another delta of frames
-            // to the queue.
-            (false, true) => {
-                for _ in 0..self.frames_per_delta {
-                    // If there are no more frames to read, the delta will be
-                    // incomplete, so this iterator is now empty.
-                    let frame = self.frames.next()?;
-                    self.gate_frame_queue.push(frame);
-                }
-            },
-
-            // Queue is partially full, meaning there were not enough initial
-            // frames to fill the queue, and ends this iterator.
-            (false, false) => return None,
-
-            // Can only occur with a zero-sized queue, meaning this iterator is
-            // trivially always empty.
-            (true, true) => return None,
-        }
-
-        // Calculate the mean squares of the current circular buffer.
-        let mut total_energy = S::Frame::EQUILIBRIUM;
-        for frame in self.gate_frame_queue.iter() {
-            let energy = frame.mul_frame(frame.into_float_frame());
-            total_energy = total_energy.add_frame(energy.into_signed_frame());
-        }
-
-        let power = total_energy.mul_amp(1.0 / self.gate_frame_queue.capacity() as f64);
-
-        Some(power)
+        self.0.next()
     }
 }
 
