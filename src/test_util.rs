@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 use std::fs::File;
-use std::io::{Read, Result as IoResult};
+use std::io::{Error as IoError, Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -230,14 +230,18 @@ impl<R: Read> Iterator for TestReader<R> {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
-    pub fn yield_test_files(target_dir: &Path) -> IoResult<Vec<PathBuf>> {
-        let read_dir = target_dir.read_dir()?;
+    pub fn load_custom_audio_paths(dir_path: &Path) -> IoResult<Vec<PathBuf>> {
+        let read_dir = std::fs::read_dir(dir_path)?;
 
-        let result = read_dir
-            .map(|res| res.map(|e| e.path()))
-            .collect::<Result<_, _>>();
+        let mut entries = read_dir
+            .map(|res| {
+                res.map(|dir_entry| dir_entry.path())
+            })
+            .collect::<IoResult<Vec<_>>>()?;
 
-        result
+        entries.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+
+        Ok(entries)
     }
 
     pub fn check_sox() -> bool {
@@ -265,36 +269,6 @@ impl TestUtil {
             .unwrap_or_else(|e| panic!("could not read WAV data: {}", e));
 
         WavFrames::new(reader)
-    }
-
-    pub fn load_custom_audio_paths(dir_path: &Path) -> Vec<PathBuf> {
-        let read_dir = std::fs::read_dir(dir_path)
-            .unwrap_or_else(|e| panic!("could not read dir: {}", e));
-
-        let mut entries = read_dir
-            .filter_map(|res| {
-                let dir_entry = res
-                    .unwrap_or_else(|e| panic!("could not read dir entry: {}", e));
-
-                let path = dir_entry.path();
-
-                match path.extension() {
-                    Some(ext) => {
-                        if ext == "flac" || ext == "wav" {
-                            Some(path)
-                        } else {
-                            None
-                        }
-                    },
-                    None => None,
-                }
-            })
-            .collect::<Vec<_>>()
-        ;
-
-        entries.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
-
-        entries
     }
 
     pub fn sox_eval(cmd: &mut Command) -> Vec<u8> {
@@ -464,15 +438,17 @@ mod tests {
     #[test]
     fn load_custom_audio_paths() {
         let temp_dir = create_dir_with_files(&[
-            "03.flac", "02.txt", "01.wav", "04"
+            "03.flac", "02.flac", "01.wav", "04.wav"
         ]);
         let temp_dir_path = temp_dir.path();
 
         assert_eq!(
-            TestUtil::load_custom_audio_paths(&temp_dir_path),
+            TestUtil::load_custom_audio_paths(&temp_dir_path).unwrap(),
             vec![
                 temp_dir_path.join("01.wav"),
+                temp_dir_path.join("02.flac"),
                 temp_dir_path.join("03.flac"),
+                temp_dir_path.join("04.wav"),
             ]
         );
     }
