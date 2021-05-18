@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Result as IoResult};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -195,16 +195,19 @@ pub(crate) enum TestReader<R: Read> {
 }
 
 impl TestReader<File> {
-    pub fn read_path(path: &Path) -> Self {
-        let ext = path.extension()
-            .unwrap_or_else(|| panic!("path does not have an extension: {}", path.display()));
+    pub fn read_path(path: &Path) -> Result<Self, String> {
+        let ext = path
+            .extension()
+            .ok_or_else(|| {
+                format!("path does not have an extension: {}", path.display())
+            })?;
 
         if ext == "flac" {
-            Self::Flac(TestUtil::load_flac_data(path))
+            Ok(Self::Flac(TestUtil::load_flac_data(path)))
         } else if ext == "wav" {
-            Self::Wav(TestUtil::load_wav_data(path))
+            Ok(Self::Wav(TestUtil::load_wav_data(path)))
         } else {
-            panic!("unknown extension: {:?}", ext);
+            Err(format!("unknown extension: {:?}", ext))
         }
     }
 
@@ -227,6 +230,16 @@ impl<R: Read> Iterator for TestReader<R> {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
+    pub fn yield_test_files(target_dir: &Path) -> IoResult<Vec<PathBuf>> {
+        let read_dir = target_dir.read_dir()?;
+
+        let result = read_dir
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<_, _>>();
+
+        result
+    }
+
     pub fn check_sox() -> bool {
         Command::new("sox").arg("--version")
             .status()
