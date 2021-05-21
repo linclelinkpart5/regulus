@@ -15,6 +15,57 @@ use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result
 
 use crate::MAX_CHANNELS;
 
+#[derive(Debug)]
+pub enum ReaderError {
+    NoExt,
+    BadExt,
+    Io(IoError),
+    Flac(ClaxonError),
+    Wav(HoundError),
+}
+
+impl From<LoadFlacError> for ReaderError {
+    fn from(err: LoadFlacError) -> Self {
+        match err {
+            LoadFlacError::Io(err) => Self::Io(err),
+            LoadFlacError::Flac(err) => Self::Flac(err),
+        }
+    }
+}
+
+impl From<LoadWavError> for ReaderError {
+    fn from(err: LoadWavError) -> Self {
+        match err {
+            LoadWavError::Io(err) => Self::Io(err),
+            LoadWavError::Wav(err) => Self::Wav(err),
+        }
+    }
+}
+
+impl From<ClaxonError> for ReaderError {
+    fn from(err: ClaxonError) -> Self {
+        ReaderError::Flac(err)
+    }
+}
+
+impl From<HoundError> for ReaderError {
+    fn from(err: HoundError) -> Self {
+        ReaderError::Wav(err)
+    }
+}
+
+#[derive(Debug)]
+pub enum LoadFlacError {
+    Io(IoError),
+    Flac(ClaxonError),
+}
+
+#[derive(Debug)]
+pub enum LoadWavError {
+    Io(IoError),
+    Wav(HoundError),
+}
+
 pub(crate) enum WaveKind {
     Sine,
     Square,
@@ -195,34 +246,32 @@ pub(crate) enum TestReader<R: Read> {
 }
 
 impl TestReader<File> {
-    pub fn read_path(path: &Path) -> Result<Self, String> {
+    pub fn read_path(path: &Path) -> Result<Self, ReaderError> {
         let ext = path
             .extension()
-            .ok_or_else(|| {
-                format!("path does not have an extension: {}", path.display())
-            })?;
+            .ok_or(ReaderError::NoExt)?;
 
         if ext == "flac" {
-            Ok(Self::Flac(TestUtil::load_flac_data(path)))
+            Ok(Self::Flac(TestUtil::load_flac_data(path)?))
         } else if ext == "wav" {
-            Ok(Self::Wav(TestUtil::load_wav_data(path)))
+            Ok(Self::Wav(TestUtil::load_wav_data(path)?))
         } else {
-            Err(format!("unknown extension: {:?}", ext))
+            Err(ReaderError::BadExt)
         }
     }
 
-    pub fn into_signal(self) -> SignalFromFrames<Self, MAX_CHANNELS> {
-        sampara::signal::from_frames(self)
+    pub fn into_signal(self) -> impl Signal<MAX_CHANNELS> {
+        sampara::signal::from_frames(self.map(Result::unwrap))
     }
 }
 
 impl<R: Read> Iterator for TestReader<R> {
-    type Item = [f64; MAX_CHANNELS];
+    type Item = Result<[f64; MAX_CHANNELS], ReaderError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Flac(fs) => fs.next().map(Result::unwrap),
-            Self::Wav(fs) => fs.next().map(Result::unwrap),
+            Self::Flac(fs) => fs.next().map(|r| r.map_err(Into::into)),
+            Self::Wav(fs) => fs.next().map(|r| r.map_err(Into::into)),
         }
     }
 }
@@ -251,24 +300,20 @@ impl TestUtil {
             .unwrap_or(false)
     }
 
-    pub fn load_flac_data(path: &Path) -> FlacFrames<File> {
-        let file = File::open(path)
-            .unwrap_or_else(|e| panic!("could not open file: {}", e));
+    pub fn load_flac_data(path: &Path) -> Result<FlacFrames<File>, LoadFlacError> {
+        let file = File::open(path).map_err(LoadFlacError::Io)?;
 
-        let reader = FlacReader::new(file)
-            .unwrap_or_else(|e| panic!("could not read FLAC data: {}", e));
+        let reader = FlacReader::new(file).map_err(LoadFlacError::Flac)?;
 
-        FlacFrames::new(reader)
+        Ok(FlacFrames::new(reader))
     }
 
-    pub fn load_wav_data(path: &Path) -> WavFrames<File> {
-        let file = File::open(path)
-            .unwrap_or_else(|e| panic!("could not open file: {}", e));
+    pub fn load_wav_data(path: &Path) -> Result<WavFrames<File>, LoadWavError> {
+        let file = File::open(path).map_err(LoadWavError::Io)?;
 
-        let reader = WavReader::new(file)
-            .unwrap_or_else(|e| panic!("could not read WAV data: {}", e));
+        let reader = WavReader::new(file).map_err(LoadWavError::Wav)?;
 
-        WavFrames::new(reader)
+        Ok(WavFrames::new(reader))
     }
 
     pub fn sox_eval(cmd: &mut Command) -> Vec<u8> {
