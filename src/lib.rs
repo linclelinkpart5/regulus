@@ -20,6 +20,8 @@ pub use loudness::Loudness;
 mod tests {
     use super::*;
 
+    use std::path::Path;
+
     use crate::test_util::TestUtil;
 
     use sampara::signal::Signal;
@@ -42,5 +44,15 @@ mod tests {
         let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
         assert_abs_diff_eq!(loudness, -3.010251969611668, epsilon = 1e-9);
+    }
+
+    #[test]
+    fn scan_custom_audio() {
+        let custom_audio_dir = Path::new("audio");
+        if let Ok(paths) = TestUtil::load_custom_audio_paths(&custom_audio_dir) {
+            for path in paths {
+                
+            }
+        }
     }
 }

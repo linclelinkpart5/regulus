@@ -14,6 +14,9 @@ use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 
 use crate::MAX_CHANNELS;
+use crate::filter::KWeightFilteredSignal;
+use crate::gating::GatedPowers;
+use crate::loudness::Loudness;
 
 #[derive(Debug)]
 pub enum ReaderError {
@@ -245,6 +248,26 @@ pub(crate) enum TestReader<R: Read> {
     Wav(WavFrames<R>),
 }
 
+impl<R: Read> TestReader<R> {
+    pub fn into_signal(self) -> impl Signal<MAX_CHANNELS, Frame = [f64; MAX_CHANNELS]> {
+        sampara::signal::from_frames(self.map(Result::unwrap))
+    }
+
+    pub fn num_channels(&self) -> u32 {
+        match self {
+            Self::Flac(s) => s.num_channels,
+            Self::Wav(s) => s.num_channels,
+        }
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        match self {
+            Self::Flac(s) => s.sample_rate,
+            Self::Wav(s) => s.sample_rate,
+        }
+    }
+}
+
 impl TestReader<File> {
     pub fn read_path(path: &Path) -> Result<Self, ReaderError> {
         let ext = path
@@ -258,10 +281,6 @@ impl TestReader<File> {
         } else {
             Err(ReaderError::BadExt)
         }
-    }
-
-    pub fn into_signal(self) -> impl Signal<MAX_CHANNELS> {
-        sampara::signal::from_frames(self.map(Result::unwrap))
     }
 }
 
@@ -279,6 +298,18 @@ impl<R: Read> Iterator for TestReader<R> {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
+    pub fn process_frames<R: Read>(reader: TestReader<R>) {
+        let sample_rate = reader.sample_rate();
+
+        let signal = reader.into_signal();
+
+        let filtered_signal = KWeightFilteredSignal::new(signal, sample_rate);
+        let gated_powers = GatedPowers::new(filtered_signal, sample_rate);
+        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
+
+        println!("Loudness: {}", loudness)
+    }
+
     pub fn load_custom_audio_paths(dir_path: &Path) -> IoResult<Vec<PathBuf>> {
         let read_dir = std::fs::read_dir(dir_path)?;
 
