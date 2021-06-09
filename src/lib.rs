@@ -1,5 +1,3 @@
-#![feature(associated_type_bounds)]
-
 pub mod constants;
 pub mod filter;
 pub mod stats;
@@ -51,7 +49,7 @@ mod tests {
         let custom_audio_dir = Path::new("audio");
         if let Ok(paths) = TestUtil::load_custom_audio_paths(&custom_audio_dir) {
             for path in paths {
-                
+
             }
         }
     }
