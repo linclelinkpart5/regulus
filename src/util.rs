@@ -1,7 +1,5 @@
 use sampara::{Frame, Signal};
 
-use crate::stats::Stats;
-
 const DEN_THRESHOLD: f64 = 1.0e-15;
 
 pub struct Util;
@@ -46,27 +44,6 @@ impl Util {
         else { x }
     }
 
-    /// Calculates the mean square of a signal.
-    pub fn mean_sq<S, const N: usize>(frames: S) -> S::Frame
-    where
-        S: Signal<N>,
-        S::Frame: Frame<N, Sample = f64>,
-    {
-        let mut stats = Stats::new();
-        stats.extend(frames.map(|s| s.mul_frame(s.into_float_frame())));
-        stats.mean
-    }
-
-    /// Calculates the root mean square of a signal.
-    pub fn root_mean_sq<S, const N: usize>(frames: S) -> S::Frame
-    where
-        S: Signal<N>,
-        S::Frame: Frame<N, Sample = f64>,
-    {
-        let mean_sqs = Self::mean_sq(frames);
-        mean_sqs.apply(f64::sqrt)
-    }
-
     /// Calculates the number of samples in a given number of milliseconds with
     /// respect to a sample rate.
     pub fn ms_to_samples(ms: u64, sample_rate: u32) -> u64 {
@@ -105,61 +82,6 @@ mod tests {
             let produced = Util::ms_to_samples(ms, sample_rate);
 
             assert_eq!(expected, produced)
-        }
-    }
-
-    #[test]
-    fn root_mean_sq() {
-        const SAMPLE_RATE: usize = 100000;
-        const AMPLITUDES: [f64; 5] = [0.2, 0.4, 0.6, 0.8, 1.0];
-        const EPSILON: f64 = 1e-8;
-
-        // Full flat signal.
-        let signal = signal::constant(AMPLITUDES).take(SAMPLE_RATE);
-
-        let produced = Util::root_mean_sq(signal);
-        let expected = AMPLITUDES;
-
-        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
-            assert_relative_eq!(p, e, epsilon=EPSILON);
-        }
-
-        // Sine wave.
-        let signal = TestUtil::gen_sine_wave(SAMPLE_RATE as f64, 1000.0)
-            .map(|x| AMPLITUDES.mul_amp(x))
-            .take(SAMPLE_RATE);
-
-        let produced = Util::root_mean_sq(signal);
-        let expected = AMPLITUDES.mul_amp(1.0 / 2.0f64.sqrt());
-
-        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
-            assert_relative_eq!(p, e, epsilon=EPSILON);
-        }
-
-        // Square wave.
-        let signal = TestUtil::gen_square_wave(SAMPLE_RATE as f64, 1000.0)
-            .map(|x| AMPLITUDES.mul_amp(x))
-            .take(SAMPLE_RATE);
-
-        let produced = Util::root_mean_sq(signal);
-        let expected = AMPLITUDES;
-
-        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
-            assert_relative_eq!(p, e, epsilon=EPSILON);
-        }
-
-        // Sawtooth wave.
-        let signal = TestUtil::gen_sawtooth_wave(SAMPLE_RATE as f64, 1000.0)
-            .map(|x| AMPLITUDES.mul_amp(x))
-            .take(SAMPLE_RATE);
-
-        let produced = Util::root_mean_sq(signal);
-        let expected = AMPLITUDES.mul_amp(1.0 / 3.0f64.sqrt());
-
-        for (p, e) in produced.into_channels().zip(expected.into_channels()) {
-            // TODO: This check isn't as accurate as the others, seems to have
-            //       some floating-point error.
-            assert_relative_eq!(p, e, epsilon=1e-3);
         }
     }
 }
