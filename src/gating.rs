@@ -1,21 +1,21 @@
 use sampara::{Frame, Signal};
-use sampara::signal::{Ms, StepBy};
+use sampara::sample::FloatSample;
+use sampara::signal::{LazyMovingMs, StepBy};
 
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowers<S, const N: usize>(StepBy<Ms<S, Vec<S::Frame>, N>, N>)
+pub struct GatedPowers<S, const N: usize>(StepBy<LazyMovingMs<S, Vec<S::Frame>, N>, N>)
 where
     S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
-;
+    <S::Frame as Frame<N>>::Sample: FloatSample;
 
 impl<S, const N: usize> GatedPowers<S, N>
 where
     S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
+    <S::Frame as Frame<N>>::Sample: FloatSample,
 {
     pub fn new(signal: S, sample_rate: u32) -> Self {
         // Calculate the gate length, in frames.
@@ -23,13 +23,13 @@ where
         let gate_buffer_len = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
 
         // Number of frames to add at a time for each iteration after the first.
-        // This be the number of steps to advance the mean squares iterator for
+        // This is the number of steps to advance the mean squares iterator for
         // each iteration (i.e. the "step-by" amount).
         let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
 
         let buffer = vec![Frame::EQUILIBRIUM; gate_buffer_len];
 
-        let ms_signal = signal.ms_fill(buffer);
+        let ms_signal = signal.lazy_ms(buffer);
 
         // We want to advance the mean squares iterator by the delta amount for
         // each gated iteration.
