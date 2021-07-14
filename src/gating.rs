@@ -29,7 +29,7 @@ where
 
         let buffer = vec![Frame::EQUILIBRIUM; gate_buffer_len];
 
-        let ms_signal = signal.lazy_ms(buffer);
+        let ms_signal = signal.lazy_moving_ms(buffer);
 
         // We want to advance the mean squares iterator by the delta amount for
         // each gated iteration.
