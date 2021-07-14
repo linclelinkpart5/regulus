@@ -1,6 +1,6 @@
 use sampara::{Frame, Signal};
+use sampara::stats::CumulativeMean;
 
-use crate::stats::Stats;
 use crate::util::Util;
 
 const ABSOLUTE_LOUDNESS_THRESHOLD: f64 = -70.0;
@@ -16,7 +16,7 @@ impl Loudness {
         S: Signal<N>,
         S::Frame: Frame<N, Sample = f64>,
     {
-        let mut averager = Stats::new();
+        let mut averager = CumulativeMean::default();
         let mut absolutely_loud_blocks = Vec::new();
 
         let mut num_gates: usize = 0;
@@ -26,7 +26,7 @@ impl Loudness {
             // If the block loudness is greater than the absolute loudness
             // threshold, save the channel powers.
             if block_loudness > ABSOLUTE_LOUDNESS_THRESHOLD {
-                averager.add(channel_powers);
+                averager.advance(channel_powers);
                 absolutely_loud_blocks.push((j, block_loudness, channel_powers))
             }
 
@@ -40,7 +40,7 @@ impl Loudness {
         // power of blocks that were marked as "loud" (i.e. blocks with
         // loudness above the absolute loudness threshold) during the initial
         // pass.
-        let absolute_loudness = Util::loudness(averager.mean, channel_weights);
+        let absolute_loudness = Util::loudness(averager.current(), channel_weights);
         println!("Absolute loudness: {} LKFS", absolute_loudness);
 
         // This performs the calculation done in equation #6 in the ITU BS.1770
@@ -53,18 +53,18 @@ impl Loudness {
         // tech spec. From the collection of saved blocks that were marked as
         // "absolutely loud", only those that exceed the relative loudness
         // threshold need to be selected and averaged.
-        let mut relative_averager = Stats::new();
+        let mut relative_averager = CumulativeMean::default();
 
         for (_, block_loudness, channel_powers) in absolutely_loud_blocks {
             // These blocks are already known to be above the absolute loudness
             // threshold. For this calculation however, they also need to be
             // over the relative loudness threshold.
             if block_loudness > relative_loudness_threshold {
-                relative_averager.add(channel_powers)
+                relative_averager.advance(channel_powers)
             }
         }
 
-        let relative_loudness = Util::loudness(relative_averager.mean, channel_weights);
+        let relative_loudness = Util::loudness(relative_averager.current(), channel_weights);
         println!("Relative loudness: {} LKFS", relative_loudness);
 
         relative_loudness

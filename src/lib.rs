@@ -1,6 +1,5 @@
 pub mod constants;
 pub mod filter;
-pub mod stats;
 pub mod util;
 pub mod gating;
 pub mod loudness;
