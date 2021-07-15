@@ -13,11 +13,11 @@ impl Util {
     /// Given the mean squares (powers) of an input signal and a set of
     /// per-channel weights, calculates the weighted loudness across all input
     /// channels. This is equation #4 in the ITU BS.1770 tech spec.
-    pub fn loudness<F, const N: usize>(mean_sq: F, weights: F::Float) -> f64
+    pub fn loudness<F, const N: usize>(mean_sq: F, weights: F) -> f64
     where
         F: Frame<N, Sample = f64>,
     {
-        let zipped: F = mean_sq.mul_frame(weights);
+        let zipped: F = mean_sq.mul_frame(weights.into_float_frame());
 
         Util::lufs(zipped.channels().sum())
     }
