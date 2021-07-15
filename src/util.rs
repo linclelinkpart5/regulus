@@ -1,4 +1,4 @@
-use sampara::{Frame, Signal};
+use sampara::Frame;
 
 const DEN_THRESHOLD: f64 = 1.0e-15;
 
@@ -57,12 +57,6 @@ impl Util {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::test_util::TestUtil;
-
-    use sampara::{Signal, signal};
-
-    use approx::assert_relative_eq;
 
     #[test]
     fn ms_to_samples() {
