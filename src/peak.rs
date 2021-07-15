@@ -2,6 +2,8 @@
 
 use sampara::{Frame, Signal};
 
+/// Keeps a running absolute max of samples per channel that have been seen in
+/// a signal. Each channel is updated independently.
 pub struct RunningPeak<S, const N: usize>
 where
     S: Signal<N>,
