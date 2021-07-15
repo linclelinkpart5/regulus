@@ -22,6 +22,7 @@ mod tests {
     use crate::test_util::TestUtil;
 
     use sampara::signal::Signal;
+    use sampara::wavegen::{Sine, Phase};
 
     use approx::assert_abs_diff_eq;
 
@@ -33,8 +34,8 @@ mod tests {
         const SAMPLE_RATE: f64 = 48000.0;
         const SINE_HZS: [f64; 5] = [997.0, 0.0, 0.0, 0.0, 0.0];
 
-        let signal = TestUtil::gen_sine_wave(SAMPLE_RATE, SINE_HZS)
-            .take((SAMPLE_RATE as usize) * 2);
+        let phase = Phase::fixed_hz(SAMPLE_RATE, SINE_HZS);
+        let signal = phase.gen_wave(Sine).take((SAMPLE_RATE as usize) * 2);
 
         let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
         let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);

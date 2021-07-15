@@ -69,33 +69,6 @@ pub enum LoadWavError {
     Wav(HoundError),
 }
 
-pub(crate) enum WaveKind {
-    Sine,
-    Square,
-    Sawtooth,
-}
-
-impl WaveKind {
-    fn calc(&self, x: f64) -> f64 {
-        match self {
-            Self::Sine => (2.0 * PI * x).sin(),
-            Self::Square => {
-                if x < 0.5 { 1.0 }
-                else { -1.0 }
-            },
-            Self::Sawtooth => 2.0 * x - 1.0,
-        }
-    }
-
-    const fn name(&self) -> &'static str {
-        match self {
-            Self::Sine => "sine",
-            Self::Square => "square",
-            Self::Sawtooth => "sawtooth",
-        }
-    }
-}
-
 fn amplitude(bits_per_sample: u32) -> f64 {
     // Since the samples are signed integers (one of 16/24/32-bit), need to
     // normalize them to the range [-1.0, 1.0).
@@ -410,38 +383,6 @@ impl TestUtil {
         res
     }
 
-    pub fn sox_gen_wave_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
-        let mut cmd = Command::new("sox");
-
-        cmd
-            // No input file name.
-            .arg("--null")
-
-            // Set sample rate.
-            .arg("--rate").arg(sample_rate.to_string())
-
-            // Set output data format params.
-            .arg("--endian").arg("little")
-            .arg("--channels").arg("1")
-            .arg("--type").arg("f64")
-
-            // Output to stdout.
-            .arg("-")
-
-            // Wave to generate/synthesize.
-            .arg("synth").arg("3").arg(kind.name()).arg(frequency.to_string())
-
-            // Insert some headroom to prevent clipping.
-            .arg("gain").arg("-2")
-        ;
-
-        cmd
-    }
-
-    fn sox_gen_wave(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Vec<f64> {
-        Self::sox_eval_samples(&mut Self::sox_gen_wave_cmd(sample_rate, kind, frequency))
-    }
-
     pub fn load_audio_data(path: &Path) -> (Vec<f64>, u32, u8) {
         // Get sample rate.
         let stdout_str = Self::sox_eval_string(
@@ -469,51 +410,5 @@ impl TestUtil {
         );
 
         (flat_samples, sample_rate, num_channels)
-    }
-
-    /// Quick and easy way to generate a sine wave.
-    // TODO: Replace with `sampara` wavegen once available.
-    pub fn gen_wave<F, const N: usize>(sample_rate: f64, hz: F, kind: WaveKind)
-        -> impl Signal<N, Frame = F>
-    where
-        F: Frame<N, Sample = f64>,
-    {
-        let step: F = hz.mul_amp(1.0 / sample_rate);
-
-        // Quick and easy way to generate a sine wave.
-        // TODO: Replace with `sampara` wavegen once available.
-        let mut phase: F = Frame::EQUILIBRIUM;
-        let signal = sampara::signal::from_fn(move || {
-            let x = phase;
-            phase.zip_transform(step, |p, s| (p + s) % 1.0);
-            let y = x.apply(|i| kind.calc(i));
-            Some(y)
-        });
-
-        signal
-    }
-
-    pub fn gen_sine_wave<F, const N: usize>(sample_rate: f64, hz: F)
-        -> impl Signal<N, Frame = F>
-    where
-        F: Frame<N, Sample = f64>,
-    {
-        Self::gen_wave(sample_rate, hz, WaveKind::Sine)
-    }
-
-    pub fn gen_square_wave<F, const N: usize>(sample_rate: f64, hz: F)
-        -> impl Signal<N, Frame = F>
-    where
-        F: Frame<N, Sample = f64>,
-    {
-        Self::gen_wave(sample_rate, hz, WaveKind::Square)
-    }
-
-    pub fn gen_sawtooth_wave<F, const N: usize>(sample_rate: f64, hz: F)
-        -> impl Signal<N, Frame = F>
-    where
-        F: Frame<N, Sample = f64>,
-    {
-        Self::gen_wave(sample_rate, hz, WaveKind::Sawtooth)
     }
 }

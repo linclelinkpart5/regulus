@@ -86,12 +86,6 @@ where
 mod tests {
     use super::*;
 
-    use std::process::Command;
-
-    use approx::abs_diff_eq;
-
-    use crate::test_util::{TestUtil, WaveKind};
-
     #[test]
     fn coefficients() {
         // ITU BS.1770 provides coefficients for both filters at a 48KHz
@@ -168,65 +162,6 @@ mod tests {
         let produced = Kind::HighPass.coefficients(48000);
 
         assert_eq!(expected, produced);
-    }
-
-    fn sox_gen_wave_filtered_cmd(sample_rate: u32, kind: &WaveKind, frequency: u32) -> Command {
-        let mut cmd = TestUtil::sox_gen_wave_cmd(sample_rate, kind, frequency);
-
-        // Shelving filter.
-        let coeff = Kind::Shelving.coefficients(sample_rate);
-        cmd.arg("biquad")
-            .arg(coeff.b0.to_string())
-            .arg(coeff.b1.to_string())
-            .arg(coeff.b2.to_string())
-            .arg("1.0")
-            .arg(coeff.a1.to_string())
-            .arg(coeff.a2.to_string())
-        ;
-
-        // High pass filter.
-        let coeff = Kind::HighPass.coefficients(sample_rate);
-        cmd.arg("biquad")
-            .arg(coeff.b0.to_string())
-            .arg(coeff.b1.to_string())
-            .arg(coeff.b2.to_string())
-            .arg("1.0")
-            .arg(coeff.a1.to_string())
-            .arg(coeff.a2.to_string())
-        ;
-
-        cmd
-    }
-
-    #[test]
-    fn sox_filter_suite() {
-        const RATE: u32 = 48000;
-        const KIND: &WaveKind = &WaveKind::Sine;
-        const FREQ: u32 = 997;
-
-        let frames = TestUtil::sox_eval_samples(&mut TestUtil::sox_gen_wave_cmd(RATE, KIND, FREQ));
-        let signal = sampara::signal::from_frames(frames);
-
-        let filtered_frames = signal
-            .biquad(Kind::Shelving.coefficients(RATE))
-            .biquad(Kind::HighPass.coefficients(RATE))
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        let fx = TestUtil::sox_eval_samples(&mut sox_gen_wave_filtered_cmd(RATE, KIND, FREQ));
-
-        // Check that the number of frames stays the same.
-        assert_eq!(
-            filtered_frames.len(), fx.len(),
-            "frame counts differ: {} != {}", filtered_frames.len(), fx.len(),
-        );
-
-        for (i, (px, ex)) in filtered_frames.into_iter().zip(fx).enumerate() {
-            assert!(
-                abs_diff_eq!(px, ex, epsilon = 1e-9),
-                "frames @ {} differ: {} != {}", i, px, ex
-            );
-        }
     }
 }
 
