@@ -266,6 +266,18 @@ impl<R: Read> TestReader<R> {
             Self::Wav(s) => s.sample_rate,
         }
     }
+
+    pub fn process_frames(self) {
+        let sample_rate = self.sample_rate();
+
+        let signal = self.into_signal();
+
+        let filtered_signal = KWeightFilteredSignal::new(signal, sample_rate);
+        let gated_powers = GatedPowers::new(filtered_signal, sample_rate);
+        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
+
+        println!("Loudness: {}", loudness)
+    }
 }
 
 impl TestReader<File> {
@@ -298,30 +310,49 @@ impl<R: Read> Iterator for TestReader<R> {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
-    pub fn process_frames<R: Read>(reader: TestReader<R>) {
-        let sample_rate = reader.sample_rate();
+    pub fn collect_custom_album_dirs(root_dir: &Path) -> impl Iterator<Item = PathBuf> {
+        let read_dir = std::fs::read_dir(root_dir).expect("cannot read root dir");
 
-        let signal = reader.into_signal();
+        read_dir.filter_map(|res| {
+            let dir_entry = res.expect("cannot read subentry in root dir");
 
-        let filtered_signal = KWeightFilteredSignal::new(signal, sample_rate);
-        let gated_powers = GatedPowers::new(filtered_signal, sample_rate);
-        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
+            let metadata = dir_entry.metadata().expect("cannot read subentry metadata");
 
-        println!("Loudness: {}", loudness)
+            // Only keep directories.
+            if metadata.is_dir() {
+                Some(dir_entry.path())
+            }
+            else {
+                None
+            }
+        })
     }
 
-    pub fn load_custom_audio_paths(dir_path: &Path) -> IoResult<Vec<PathBuf>> {
-        let read_dir = std::fs::read_dir(dir_path)?;
+    pub fn load_custom_album_tracks(album_dir: &Path) -> impl Iterator<Item = (PathBuf, TestReader<File>)> {
+        let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
-        let mut entries = read_dir
+        let mut track_paths = read_dir
             .map(|res| {
-                res.map(|dir_entry| dir_entry.path())
+                let dir_entry = res.expect("cannot read subentry in album dir");
+
+                let metadata = dir_entry.metadata().expect("cannot read subentry metadata");
+
+                assert!(metadata.is_file(), "subentry is not a file");
+
+                let track_path = dir_entry.path();
+
+                track_path
             })
-            .collect::<IoResult<Vec<_>>>()?;
+            .collect::<Vec<_>>();
 
-        entries.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+        track_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
 
-        Ok(entries)
+        track_paths.into_iter().map(|track_path| {
+            let reader = TestReader::read_path(&track_path)
+                .expect("subentry has missing or unkown extension");
+
+            (track_path, reader)
+        })
     }
 
     pub fn check_sox() -> bool {
@@ -484,48 +515,5 @@ impl TestUtil {
         F: Frame<N, Sample = f64>,
     {
         Self::gen_wave(sample_rate, hz, WaveKind::Sawtooth)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::fs::File;
-
-    use tempfile::{TempDir, Builder};
-
-    fn create_dir_with_files<I, S>(files: I) -> TempDir
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let temp_dir = Builder::new().tempdir().unwrap();
-
-        let path = temp_dir.path();
-
-        for file_name in files {
-            File::create(path.join(file_name.as_ref())).unwrap();
-        }
-
-        temp_dir
-    }
-
-    #[test]
-    fn load_custom_audio_paths() {
-        let temp_dir = create_dir_with_files(&[
-            "03.flac", "02.flac", "01.wav", "04.wav"
-        ]);
-        let temp_dir_path = temp_dir.path();
-
-        assert_eq!(
-            TestUtil::load_custom_audio_paths(&temp_dir_path).unwrap(),
-            vec![
-                temp_dir_path.join("01.wav"),
-                temp_dir_path.join("02.flac"),
-                temp_dir_path.join("03.flac"),
-                temp_dir_path.join("04.wav"),
-            ]
-        );
     }
 }

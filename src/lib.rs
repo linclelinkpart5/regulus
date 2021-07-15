@@ -46,10 +46,10 @@ mod tests {
     #[test]
     fn scan_custom_audio() {
         let custom_audio_dir = Path::new("audio");
-        if let Ok(paths) = TestUtil::load_custom_audio_paths(&custom_audio_dir) {
-            for path in paths {
+        let album_dirs = TestUtil::collect_custom_album_dirs(&custom_audio_dir);
 
-            }
+        for album_dir in album_dirs {
+
         }
     }
 }
