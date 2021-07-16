@@ -12,6 +12,7 @@ use claxon::input::BufferedReader;
 use sampara::{Frame, Signal};
 use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
+use serde::Deserialize;
 
 use crate::MAX_CHANNELS;
 use crate::filter::KWeightFilteredSignal;
@@ -278,6 +279,24 @@ impl<R: Read> Iterator for TestReader<R> {
             Self::Wav(fs) => fs.next().map(|r| r.map_err(Into::into)),
         }
     }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Analysis {
+    momentary_mean: f64,
+    momentary_maximum: f64,
+    momentary_range: f64,
+    shortterm_mean: f64,
+    shortterm_maximum: f64,
+    shortterm_range: f64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AlbumTestcase {
+    name: String,
+    #[serde(flatten)]
+    album: Analysis,
+    tracks: Vec<Analysis>,
 }
 
 pub(crate) struct TestUtil;
