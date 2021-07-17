@@ -1,3 +1,5 @@
+#![feature(option_result_contains)]
+
 pub mod constants;
 pub mod filter;
 pub mod util;
@@ -47,7 +49,7 @@ mod tests {
     #[test]
     fn scan_custom_audio() {
         let custom_audio_dir = Path::new("audio");
-        let album_dirs = TestUtil::collect_custom_album_dirs(&custom_audio_dir);
+        let album_dirs = TestUtil::collect_album_dirs(&custom_audio_dir);
 
         for album_dir in album_dirs {
 

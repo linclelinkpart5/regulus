@@ -302,10 +302,10 @@ pub(crate) struct AlbumTestcase {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
-    pub fn collect_custom_album_dirs(root_dir: &Path) -> impl Iterator<Item = PathBuf> {
+    pub fn collect_album_dirs(root_dir: &Path) -> Vec<PathBuf> {
         let read_dir = std::fs::read_dir(root_dir).expect("cannot read root dir");
 
-        read_dir.filter_map(|res| {
+        let mut album_dir_paths = read_dir.filter_map(|res| {
             let dir_entry = res.expect("cannot read subentry in root dir");
 
             let metadata = dir_entry.metadata().expect("cannot read subentry metadata");
@@ -318,9 +318,38 @@ impl TestUtil {
                 None
             }
         })
+        .collect::<Vec<_>>();
+
+        album_dir_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+
+        album_dir_paths
     }
 
-    pub fn load_custom_album_tracks(album_dir: &Path) -> impl Iterator<Item = (PathBuf, TestReader<File>)> {
+    // pub fn collect_testcase_paths(root_dir: &Path) -> Vec<PathBuf> {
+    //     let read_dir = std::fs::read_dir(root_dir).expect("cannot read root dir");
+
+    //     let mut testcase_paths = read_dir.filter_map(|res| {
+    //         let dir_entry = res.expect("cannot read subentry in root dir");
+
+    //         let metadata = dir_entry.metadata().expect("cannot read subentry metadata");
+
+    //         // Skip any entries that are not files with a JSON extension.
+    //         if metadata.is_file() {
+    //             let path = dir_entry.path();
+    //             path.extension().contains(&"json").then(|| path)
+    //         }
+    //         else {
+    //             None
+    //         }
+    //     })
+    //     .collect::<Vec<_>>();
+
+    //     testcase_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+
+    //     testcase_paths
+    // }
+
+    pub fn collect_album_dir_items(album_dir: &Path) -> Vec<PathBuf> {
         let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
         let mut track_paths = read_dir
@@ -339,12 +368,43 @@ impl TestUtil {
 
         track_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
 
-        track_paths.into_iter().map(|track_path| {
-            let reader = TestReader::read_path(&track_path)
-                .expect("subentry has missing or unkown extension");
+        track_paths
+    }
 
-            (track_path, reader)
-        })
+    pub fn load_testcase(testcase_path: &Path) -> AlbumTestcase {
+        let testcase_str = std::fs::read_to_string(testcase_path).expect("unable to read testcase file");
+
+        serde_json::from_str(&testcase_str).expect("unable to deserialize testcase")
+    }
+
+    pub fn analyze_albums(root_dir: &Path) {
+        let album_dirs = Self::collect_album_dirs(root_dir);
+
+        let mut n = 0;
+        for album_dir in album_dirs {
+            n += 1;
+
+            let album_dir_items = Self::collect_album_dir_items(&album_dir);
+
+            for album_dir_item in album_dir_items {
+                match TestReader::read_path(&album_dir_item) {
+                    Err(ReaderError::BadExt | ReaderError::NoExt) => continue,
+                    res => {
+                        let reader = res.expect("unable to read track");
+                    },
+                }
+            }
+
+            let mut album_dir = album_dir;
+            let testcase_path = {
+                album_dir.push(".json");
+                album_dir
+            };
+
+            let testcase = Self::load_testcase(&testcase_path);
+
+            println!("Analyzing testcase #{}: '{}'", n, testcase.name);
+        }
     }
 
     pub fn check_sox() -> bool {
