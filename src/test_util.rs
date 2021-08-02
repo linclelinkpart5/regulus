@@ -15,7 +15,7 @@ use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result
 use serde::Deserialize;
 
 use crate::MAX_CHANNELS;
-use crate::filter::KWeightFilteredSignal;
+use crate::filter::KWeightFilter;
 use crate::gating::GatedPowers;
 use crate::loudness::Loudness;
 
@@ -246,7 +246,9 @@ impl<R: Read> TestReader<R> {
 
         let signal = self.into_signal();
 
-        let filtered_signal = KWeightFilteredSignal::new(signal, sample_rate);
+        let k_weighter = KWeightFilter::new(sample_rate);
+
+        let filtered_signal = signal.process(k_weighter);
         let gated_powers = GatedPowers::new(filtered_signal, sample_rate);
         let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
 

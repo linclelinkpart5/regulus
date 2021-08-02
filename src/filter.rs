@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
-use sampara::biquad::Params;
-use sampara::frame::Frame;
+use sampara::{Frame, Processor};
+use sampara::biquad::{Params, Biquad as BQ};
 use sampara::signal::{Signal, Biquad};
 
 #[derive(Copy, Clone, Debug)]
@@ -48,37 +48,35 @@ impl Kind {
     }
 }
 
-pub struct KWeightFilteredSignal<S, const N: usize>
+pub struct KWeightFilter<F, const N: usize>
 where
-    S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
-    signal: Biquad<Biquad<S, N>, N>,
+    bq_shelving: BQ<F, N>,
+    bq_highpass: BQ<F, N>,
 }
 
-impl<S, const N: usize> KWeightFilteredSignal<S, N>
+impl<F, const N: usize> KWeightFilter<F, N>
 where
-    S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
-    pub fn new(signal: S, sample_rate: u32) -> Self {
-        let signal = signal
-            .biquad(Kind::Shelving.coefficients(sample_rate))
-            .biquad(Kind::HighPass.coefficients(sample_rate));
+    pub fn new(sample_rate: u32) -> Self {
+        let bq_shelving = BQ::from(Kind::Shelving.coefficients(sample_rate));
+        let bq_highpass = BQ::from(Kind::HighPass.coefficients(sample_rate));
 
-        Self { signal }
+        Self { bq_shelving, bq_highpass }
     }
 }
 
-impl<S, const N: usize> Signal<N> for KWeightFilteredSignal<S, N>
+impl<F, const N: usize> Processor<N, N> for KWeightFilter<F, N>
 where
-    S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
+    F: Frame<N, Sample = f64>,
 {
-    type Frame = S::Frame;
+    type Input = F;
+    type Output = F;
 
-    fn next(&mut self) -> Option<Self::Frame> {
-        self.signal.next()
+    fn process(&mut self, input: Self::Input) -> Self::Output {
+        self.bq_highpass.process(self.bq_shelving.process(input))
     }
 }
 

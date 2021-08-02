@@ -11,7 +11,7 @@ pub(crate) mod test_util;
 
 pub use constants::MAX_CHANNELS;
 
-pub use filter::KWeightFilteredSignal;
+pub use filter::KWeightFilter;
 pub use gating::GatedPowers;
 pub use loudness::Loudness;
 
@@ -39,7 +39,9 @@ mod tests {
         let phase = Phase::fixed_hz(SAMPLE_RATE, SINE_HZS);
         let signal = phase.gen_wave(Sine).take((SAMPLE_RATE as usize) * 2);
 
-        let filtered_signal = KWeightFilteredSignal::new(signal, SAMPLE_RATE as u32);
+        let k_weighter = KWeightFilter::new(SAMPLE_RATE as u32);
+
+        let filtered_signal = signal.process(k_weighter);
         let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);
         let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
