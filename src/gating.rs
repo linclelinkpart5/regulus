@@ -1,23 +1,28 @@
-use sampara::{Frame, Signal};
+use sampara::{Frame, BlockingProcessor};
+use sampara::stats::LazyMovingMs;
 use sampara::sample::FloatSample;
-use sampara::signal::{LazyMovingMs, StepBy};
 
 use crate::util::Util;
 
 const GATE_DELTA_MS: u64 = 100;
 const GATE_LENGTH_MS: u64 = 400;
 
-pub struct GatedPowers<S, const N: usize>(StepBy<LazyMovingMs<S, Vec<S::Frame>, N>, N>)
+pub struct GatedPowers<F, const N: usize>
 where
-    S: Signal<N>,
-    <S::Frame as Frame<N>>::Sample: FloatSample;
-
-impl<S, const N: usize> GatedPowers<S, N>
-where
-    S: Signal<N>,
-    <S::Frame as Frame<N>>::Sample: FloatSample,
+    F: Frame<N>,
+    F::Sample: FloatSample,
 {
-    pub fn new(signal: S, sample_rate: u32) -> Self {
+    ms_state: LazyMovingMs<Vec<F>, N>,
+    i: usize,
+    delta: usize,
+}
+
+impl<F, const N: usize> GatedPowers<F, N>
+where
+    F: Frame<N>,
+    F::Sample: FloatSample,
+{
+    pub fn new(sample_rate: u32) -> Self {
         // Calculate the gate length, in frames.
         // This will in turn determine the length of the mean squares buffer.
         let gate_buffer_len = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
@@ -27,27 +32,37 @@ where
         // each iteration (i.e. the "step-by" amount).
         let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
 
+        assert!(frames_per_delta > 0);
+
         let buffer = vec![Frame::EQUILIBRIUM; gate_buffer_len];
 
-        let ms_signal = signal.lazy_moving_ms(buffer);
+        let ms_state = LazyMovingMs::from(buffer);
 
-        // We want to advance the mean squares iterator by the delta amount for
-        // each gated iteration.
-        let gp_signal = ms_signal.step_by(frames_per_delta);
-
-        GatedPowers(gp_signal)
+        Self {
+            ms_state,
+            i: 0,
+            delta: frames_per_delta,
+        }
     }
 }
 
-impl<S, const N: usize> Signal<N> for GatedPowers<S, N>
+impl<F, const N: usize> BlockingProcessor<N, N> for GatedPowers<F, N>
 where
-    S: Signal<N>,
-    S::Frame: Frame<N, Sample = f64>,
+    F: Frame<N>,
+    F::Sample: FloatSample,
 {
-    type Frame = S::Frame;
+    type Input = F;
+    type Output = F;
 
-    fn next(&mut self) -> Option<Self::Frame> {
-        self.0.next()
+    fn try_process(&mut self, input: Self::Input) -> Option<Self::Output> {
+        let ms_power = self.ms_state.try_process(input)?;
+
+        // We only want to output the frame if it is the end of a delta.
+        let do_emit = self.i == 0;
+
+        self.i = (self.i + 1) % self.delta;
+
+        do_emit.then_some(ms_power)
     }
 }
 

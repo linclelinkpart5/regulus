@@ -247,10 +247,12 @@ impl<R: Read> TestReader<R> {
         let signal = self.into_signal();
 
         let k_weighter = KWeightFilter::new(sample_rate);
+        let power_gater = GatedPowers::new(sample_rate);
 
         let filtered_signal = signal.process(k_weighter);
-        let gated_powers = GatedPowers::new(filtered_signal, sample_rate);
-        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
+        let gated_signal = filtered_signal.blocking_process(power_gater);
+
+        let loudness = Loudness::from_gated_powers(gated_signal, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
         println!("Loudness: {}", loudness)
     }

@@ -1,4 +1,4 @@
-#![feature(option_result_contains)]
+#![feature(bool_to_option, option_result_contains)]
 
 pub mod constants;
 pub mod filter;
@@ -40,10 +40,12 @@ mod tests {
         let signal = phase.gen_wave(Sine).take((SAMPLE_RATE as usize) * 2);
 
         let k_weighter = KWeightFilter::new(SAMPLE_RATE as u32);
+        let power_gater = GatedPowers::new(SAMPLE_RATE as u32);
 
         let filtered_signal = signal.process(k_weighter);
-        let gated_powers = GatedPowers::new(filtered_signal, SAMPLE_RATE as u32);
-        let loudness = Loudness::from_gated_powers(gated_powers, [1.0, 1.0, 1.0, 1.41, 1.41]);
+        let gated_signal = filtered_signal.blocking_process(power_gater);
+
+        let loudness = Loudness::from_gated_powers(gated_signal, [1.0, 1.0, 1.0, 1.41, 1.41]);
 
         assert_abs_diff_eq!(loudness, -3.010251969611668, epsilon = 1e-9);
     }
