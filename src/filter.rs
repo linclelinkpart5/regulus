@@ -2,7 +2,6 @@ use std::f64::consts::PI;
 
 use sampara::{Frame, Processor};
 use sampara::biquad::{Params, Biquad as BQ};
-use sampara::signal::{Signal, Biquad};
 
 #[derive(Copy, Clone, Debug)]
 enum Kind {

@@ -14,10 +14,11 @@ use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 use serde::Deserialize;
 
-use crate::MAX_CHANNELS;
 use crate::filter::KWeightFilter;
 use crate::gating::GatedPowers;
 use crate::loudness::Loudness;
+
+const MAX_CHANNELS: usize = 5;
 
 #[derive(Debug)]
 pub enum ReaderError {

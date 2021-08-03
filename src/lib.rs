@@ -1,6 +1,5 @@
 #![feature(bool_to_option, option_result_contains)]
 
-pub mod constants;
 pub mod filter;
 pub mod util;
 pub mod gating;
@@ -8,8 +7,6 @@ pub mod loudness;
 pub mod peak;
 
 pub(crate) mod test_util;
-
-pub use constants::MAX_CHANNELS;
 
 pub use filter::KWeightFilter;
 pub use gating::GatedPowers;
@@ -55,7 +52,7 @@ mod tests {
         let custom_audio_dir = Path::new("audio");
         let album_dirs = TestUtil::collect_album_dirs(&custom_audio_dir);
 
-        for album_dir in album_dirs {
+        for _album_dir in album_dirs {
 
         }
     }
