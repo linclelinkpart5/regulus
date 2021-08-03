@@ -10,7 +10,7 @@ pub(crate) mod test_util;
 
 pub use filter::KWeightFilter;
 pub use gating::GatedPowers;
-pub use loudness::Loudness;
+pub use loudness::LoudnessCalculator;
 
 #[cfg(test)]
 mod tests {
@@ -42,7 +42,13 @@ mod tests {
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
 
-        let loudness = Loudness::from_gated_powers(gated_signal, [1.0, 1.0, 1.0, 1.41, 1.41]);
+        let mut loudness_calc = LoudnessCalculator::new([1.0, 1.0, 1.0, 1.41, 1.41]);
+
+        for frame in gated_signal.into_iter() {
+            loudness_calc.push(frame);
+        }
+
+        let loudness = loudness_calc.calculate().unwrap();
 
         assert_abs_diff_eq!(loudness, -3.010251969611668, epsilon = 1e-9);
     }
