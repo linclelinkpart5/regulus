@@ -15,7 +15,7 @@ use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result
 use serde::Deserialize;
 
 use crate::filter::KWeightFilter;
-use crate::gating::GatedPowers;
+use crate::gating::MomentaryGatedPowers;
 use crate::loudness::Loudness;
 
 const MAX_CHANNELS: usize = 5;
@@ -250,7 +250,7 @@ impl<R: Read> TestReader<R> {
         let signal = self.into_signal();
 
         let k_weighter = KWeightFilter::new(sample_rate);
-        let power_gater = GatedPowers::new(sample_rate);
+        let power_gater = MomentaryGatedPowers::new(sample_rate);
 
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
@@ -261,19 +261,27 @@ impl<R: Read> TestReader<R> {
     }
 }
 
+type LoadFunc = fn(&Path) -> Result<TestReader<File>, ReaderError>;
+
 impl TestReader<File> {
-    pub fn read_path(path: &Path) -> Result<Self, ReaderError> {
-        let ext = path
+    pub fn deduce_load_func(track_path: &Path) -> Result<LoadFunc, ReaderError> {
+        let ext = track_path
             .extension()
             .ok_or(ReaderError::NoExt)?;
 
         if ext == "flac" {
-            Ok(Self::Flac(TestUtil::load_flac_data(path)?))
+            Ok(|p| Ok(Self::Flac(TestUtil::load_flac_data(p)?)))
         } else if ext == "wav" {
-            Ok(Self::Wav(TestUtil::load_wav_data(path)?))
+            Ok(|p| Ok(Self::Wav(TestUtil::load_wav_data(p)?)))
         } else {
             Err(ReaderError::BadExt)
         }
+    }
+
+    pub fn read_track(track_path: &Path) -> Result<Self, ReaderError> {
+        let loader = Self::deduce_load_func(track_path)?;
+
+        (loader)(track_path)
     }
 }
 
@@ -378,7 +386,7 @@ impl TestUtil {
     //     testcase_paths
     // }
 
-    pub fn collect_track_paths(album_dir: &Path) -> Vec<PathBuf> {
+    pub fn collect_track_paths(album_dir: &Path) -> Vec<(PathBuf, LoadFunc)> {
         let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
         let mut track_paths = read_dir
@@ -391,11 +399,13 @@ impl TestUtil {
 
                 let track_path = dir_entry.path();
 
-                track_path
+                let load_func = TestReader::deduce_load_func(&track_path).expect("unknown track format");
+
+                (track_path, load_func)
             })
             .collect::<Vec<_>>();
 
-        track_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+        track_paths.sort_by(|(tp_a, _), (tp_b, _)| tp_a.file_name().cmp(&tp_b.file_name()));
 
         track_paths
     }

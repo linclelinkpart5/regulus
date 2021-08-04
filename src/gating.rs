@@ -4,10 +4,12 @@ use sampara::sample::FloatSample;
 
 use crate::util::Util;
 
-const GATE_DELTA_MS: u64 = 100;
-const GATE_LENGTH_MS: u64 = 400;
+const MOMENTARY_DELTA_MS: u64 = 100;
+const MOMENTARY_LENGTH_MS: u64 = 400;
+const SHORTTERM_DELTA_MS: u64 = 3000;
+const SHORTTERM_LENGTH_MS: u64 = 1000;
 
-pub struct GatedPowers<F, const N: usize>
+pub struct GatedPowers<F, const N: usize, const LEN: u64, const DELTA: u64>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -17,7 +19,7 @@ where
     delta: usize,
 }
 
-impl<F, const N: usize> GatedPowers<F, N>
+impl<F, const N: usize, const LEN: u64, const DELTA: u64> GatedPowers<F, N, LEN, DELTA>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -25,12 +27,12 @@ where
     pub fn new(sample_rate: u32) -> Self {
         // Calculate the gate length, in frames.
         // This will in turn determine the length of the mean squares buffer.
-        let gate_buffer_len = Util::ms_to_samples(GATE_LENGTH_MS, sample_rate) as usize;
+        let gate_buffer_len = Util::ms_to_samples(LEN, sample_rate) as usize;
 
         // Number of frames to add at a time for each iteration after the first.
         // This is the number of steps to advance the mean squares iterator for
         // each iteration (i.e. the "step-by" amount).
-        let frames_per_delta = Util::ms_to_samples(GATE_DELTA_MS, sample_rate) as usize;
+        let frames_per_delta = Util::ms_to_samples(DELTA, sample_rate) as usize;
 
         assert!(frames_per_delta > 0);
 
@@ -46,7 +48,7 @@ where
     }
 }
 
-impl<F, const N: usize> BlockingProcessor<N, N> for GatedPowers<F, N>
+impl<F, const N: usize, const LEN: u64, const DELTA: u64> BlockingProcessor<N, N> for GatedPowers<F, N, LEN, DELTA>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -65,6 +67,9 @@ where
         do_emit.then_some(ms_power)
     }
 }
+
+pub type MomentaryGatedPowers<F, const N: usize> = GatedPowers<F, N, MOMENTARY_LENGTH_MS, MOMENTARY_DELTA_MS>;
+pub type ShorttermGatedPowers<F, const N: usize> = GatedPowers<F, N, SHORTTERM_LENGTH_MS, SHORTTERM_DELTA_MS>;
 
 #[cfg(test)]
 mod tests {

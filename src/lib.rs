@@ -9,7 +9,7 @@ pub mod peak;
 pub(crate) mod test_util;
 
 pub use filter::KWeightFilter;
-pub use gating::GatedPowers;
+pub use gating::MomentaryGatedPowers;
 pub use loudness::Loudness;
 
 #[cfg(test)]
@@ -38,7 +38,7 @@ mod tests {
         let signal = phase.gen_wave(Sine).take((SAMPLE_RATE as usize) * 2);
 
         let k_weighter = KWeightFilter::new(SAMPLE_RATE as u32);
-        let power_gater = GatedPowers::new(SAMPLE_RATE as u32);
+        let power_gater = MomentaryGatedPowers::new(SAMPLE_RATE as u32);
 
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
