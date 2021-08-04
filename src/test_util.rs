@@ -9,16 +9,17 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-use sampara::{Frame, Signal};
+use sampara::{Frame, Signal, Processor, BlockingProcessor};
 use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 use serde::Deserialize;
 
 use crate::filter::KWeightFilter;
-use crate::gating::MomentaryGatedPowers;
+use crate::gating::{MomentaryGatedPowers, ShorttermGatedPowers};
 use crate::loudness::Loudness;
 
 const MAX_CHANNELS: usize = 5;
+const G_WEIGHTS: [f64; MAX_CHANNELS] = [1.0, 1.0, 1.0, 1.41, 1.41];
 
 #[derive(Debug)]
 pub enum ReaderError {
@@ -243,8 +244,6 @@ impl<R: Read> TestReader<R> {
     }
 
     pub fn process_frames(self) {
-        const G_WEIGHTS: [f64; 5] = [1.0, 1.0, 1.0, 1.41, 1.41];
-
         let sample_rate = self.sample_rate();
 
         let signal = self.into_signal();
@@ -296,7 +295,7 @@ impl<R: Read> Iterator for TestReader<R> {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub(crate) struct Analysis {
     momentary_mean: f64,
     momentary_maximum: f64,
@@ -306,7 +305,7 @@ pub(crate) struct Analysis {
     shortterm_range: f64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub(crate) struct AlbumAnalysis {
     #[serde(flatten)]
     album: Analysis,
@@ -358,8 +357,61 @@ impl TestUtil {
     }
 
     pub fn run_album_analysis(album_dir: &Path) -> AlbumAnalysis {
-        let track_paths = Self::collect_track_paths(album_dir);
-        todo!()
+        // TODO: How to handle tracks with different sample rates?
+        let track_bundles = Self::collect_track_bundles(album_dir);
+
+        let mut track_analyses = Vec::with_capacity(track_bundles.len());
+
+        for (track_path, load_func) in track_bundles {
+            let track_reader = (load_func)(&track_path).expect("unable to read track file");
+
+            let sample_rate = track_reader.sample_rate();
+
+            let mut k_weighter = KWeightFilter::new(sample_rate);
+
+            let mut momentary_gater = MomentaryGatedPowers::new(sample_rate);
+            let mut shortterm_gater = ShorttermGatedPowers::new(sample_rate);
+
+            let mut momentary_loudness_calc = Loudness::new(G_WEIGHTS);
+            let mut shortterm_loudness_calc = Loudness::new(G_WEIGHTS);
+
+            for res_frame in track_reader {
+                let frame = res_frame.expect("unable to read frame");
+
+                // The K-weighting step is done before any momentary or
+                // shortterm calculations.
+                let filtered_frame = k_weighter.process(frame);
+
+                if let Some(momentary_gated_frame) = momentary_gater.try_process(filtered_frame) {
+                    momentary_loudness_calc.push(momentary_gated_frame);
+                }
+
+                if let Some(shortterm_gated_frame) = shortterm_gater.try_process(filtered_frame) {
+                    shortterm_loudness_calc.push(shortterm_gated_frame);
+                }
+            }
+
+            let momentary_mean = momentary_loudness_calc.calculate().expect("unable to calculate momentary loudness for track");
+            let shortterm_mean = shortterm_loudness_calc.calculate().expect("unable to calculate shortterm loudness for track");
+
+            let track_analysis = Analysis {
+                momentary_mean,
+                momentary_maximum: 0.0,
+                momentary_range: 0.0,
+                shortterm_mean,
+                shortterm_maximum: 0.0,
+                shortterm_range: 0.0,
+            };
+
+            track_analyses.push(track_analysis);
+        }
+
+        let album_analysis = AlbumAnalysis {
+            album: Analysis::default(),
+            tracks: track_analyses,
+        };
+
+        album_analysis
     }
 
     // pub fn collect_testcase_paths(testcase_root_dir: &Path) -> Vec<PathBuf> {
@@ -386,7 +438,7 @@ impl TestUtil {
     //     testcase_paths
     // }
 
-    pub fn collect_track_paths(album_dir: &Path) -> Vec<(PathBuf, LoadFunc)> {
+    pub fn collect_track_bundles(album_dir: &Path) -> Vec<(PathBuf, LoadFunc)> {
         let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
         let mut track_paths = read_dir
