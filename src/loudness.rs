@@ -7,7 +7,7 @@ use crate::util::Util;
 
 const ABS_LOUDNESS_THRESH: f64 = -70.0;
 
-pub struct LoudnessCalculator<F, const N: usize>
+pub struct Loudness<F, const N: usize>
 where
     F: Frame<N, Sample = f64>,
 {
@@ -17,7 +17,7 @@ where
     g_weights: F,
 }
 
-impl<F, const N: usize> LoudnessCalculator<F, N>
+impl<F, const N: usize> Loudness<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
@@ -98,18 +98,18 @@ where
     }
 }
 
-impl<F, const N: usize> Calculator<N> for LoudnessCalculator<F, N>
+impl<F, const N: usize> Calculator<N> for Loudness<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
     type Input = F;
-    type Produced = f64;
+    type Output = Option<f64>;
 
     fn push(&mut self, gated_powers: Self::Input) {
         self.push(gated_powers)
     }
 
-    fn calculate(self) -> Option<Self::Produced> {
+    fn calculate(self) -> Self::Output {
         self.calculate()
     }
 }

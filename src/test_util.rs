@@ -16,7 +16,7 @@ use serde::Deserialize;
 
 use crate::filter::KWeightFilter;
 use crate::gating::GatedPowers;
-use crate::loudness::LoudnessCalculator;
+use crate::loudness::Loudness;
 
 const MAX_CHANNELS: usize = 5;
 
@@ -253,7 +253,7 @@ impl<R: Read> TestReader<R> {
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
 
-        let mut loudness_calc = LoudnessCalculator::new([1.0, 1.0, 1.0, 1.41, 1.41]);
+        let mut loudness_calc = Loudness::new([1.0, 1.0, 1.0, 1.41, 1.41]);
 
         for frame in gated_signal.into_iter() {
             loudness_calc.push(frame);
