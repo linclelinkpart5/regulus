@@ -243,6 +243,8 @@ impl<R: Read> TestReader<R> {
     }
 
     pub fn process_frames(self) {
+        const G_WEIGHTS: [f64; 5] = [1.0, 1.0, 1.0, 1.41, 1.41];
+
         let sample_rate = self.sample_rate();
 
         let signal = self.into_signal();
@@ -253,13 +255,7 @@ impl<R: Read> TestReader<R> {
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
 
-        let mut loudness_calc = Loudness::new([1.0, 1.0, 1.0, 1.41, 1.41]);
-
-        for frame in gated_signal.into_iter() {
-            loudness_calc.push(frame);
-        }
-
-        let loudness = loudness_calc.calculate().unwrap();
+        let loudness = gated_signal.calculate(Loudness::new(G_WEIGHTS)).unwrap();
 
         println!("Loudness: {}", loudness)
     }

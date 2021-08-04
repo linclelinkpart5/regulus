@@ -32,6 +32,7 @@ mod tests {
         // the indicated loudness will equal -3.01 LKFS.
         const SAMPLE_RATE: f64 = 48000.0;
         const SINE_HZS: [f64; 5] = [997.0, 0.0, 0.0, 0.0, 0.0];
+        const G_WEIGHTS: [f64; 5] = [1.0, 1.0, 1.0, 1.41, 1.41];
 
         let phase = Phase::fixed_hz(SAMPLE_RATE, SINE_HZS);
         let signal = phase.gen_wave(Sine).take((SAMPLE_RATE as usize) * 2);
@@ -42,13 +43,7 @@ mod tests {
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
 
-        let mut loudness_calc = Loudness::new([1.0, 1.0, 1.0, 1.41, 1.41]);
-
-        for frame in gated_signal.into_iter() {
-            loudness_calc.push(frame);
-        }
-
-        let loudness = loudness_calc.calculate().unwrap();
+        let loudness = gated_signal.calculate(Loudness::new(G_WEIGHTS)).unwrap();
 
         assert_abs_diff_eq!(loudness, -3.010251969611668, epsilon = 1e-9);
     }
