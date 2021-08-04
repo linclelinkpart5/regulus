@@ -299,8 +299,7 @@ pub(crate) struct Analysis {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct AlbumTestcase {
-    name: String,
+pub(crate) struct AlbumAnalysis {
     #[serde(flatten)]
     album: Analysis,
     tracks: Vec<Analysis>,
@@ -309,8 +308,17 @@ pub(crate) struct AlbumTestcase {
 pub(crate) struct TestUtil;
 
 impl TestUtil {
-    pub fn collect_album_dirs(root_dir: &Path) -> Vec<PathBuf> {
-        let read_dir = std::fs::read_dir(root_dir).expect("cannot read root dir");
+    pub fn load_analysis(analysis_path: &Path) -> AlbumAnalysis {
+        let analysis_str = std::fs::read_to_string(analysis_path).expect("unable to read analysis file");
+
+        serde_json::from_str(&analysis_str).expect("unable to deserialize analysis")
+    }
+
+    /// Collects album testcases from the testcase root directory. A testcase
+    /// consists of an expected album analysis result, along with the album
+    /// dir path.
+    pub fn collect_album_testcases(testcase_root_dir: &Path) -> Vec<(AlbumAnalysis, PathBuf)> {
+        let read_dir = std::fs::read_dir(testcase_root_dir).expect("cannot read root dir");
 
         let mut album_dir_paths = read_dir.filter_map(|res| {
             let dir_entry = res.expect("cannot read subentry in root dir");
@@ -318,22 +326,36 @@ impl TestUtil {
             let metadata = dir_entry.metadata().expect("cannot read subentry metadata");
 
             // Only keep directories.
-            if metadata.is_dir() {
-                Some(dir_entry.path())
+            if !metadata.is_dir() {
+                return None;
             }
-            else {
-                None
-            }
+
+            // Try and find the expected analysis result file for this album
+            // root dir.
+            let exp_analysis_name = {
+                let mut n = dir_entry.file_name();
+                n.push(".json");
+                n
+            };
+            let exp_analysis_path = testcase_root_dir.join(&exp_analysis_name);
+            let exp_analysis = Self::load_analysis(&exp_analysis_path);
+
+            Some((exp_analysis, dir_entry.path()))
         })
         .collect::<Vec<_>>();
 
-        album_dir_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
+        album_dir_paths.sort_by(|(_, dir_a), (_, dir_b)| dir_a.file_name().cmp(&dir_b.file_name()));
 
         album_dir_paths
     }
 
-    // pub fn collect_testcase_paths(root_dir: &Path) -> Vec<PathBuf> {
-    //     let read_dir = std::fs::read_dir(root_dir).expect("cannot read root dir");
+    pub fn run_album_analysis(album_dir: &Path) -> AlbumAnalysis {
+        let track_paths = Self::collect_track_paths(album_dir);
+        todo!()
+    }
+
+    // pub fn collect_testcase_paths(testcase_root_dir: &Path) -> Vec<PathBuf> {
+    //     let read_dir = std::fs::read_dir(testcase_root_dir).expect("cannot read root dir");
 
     //     let mut testcase_paths = read_dir.filter_map(|res| {
     //         let dir_entry = res.expect("cannot read subentry in root dir");
@@ -356,7 +378,7 @@ impl TestUtil {
     //     testcase_paths
     // }
 
-    pub fn collect_album_dir_items(album_dir: &Path) -> Vec<PathBuf> {
+    pub fn collect_track_paths(album_dir: &Path) -> Vec<PathBuf> {
         let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
         let mut track_paths = read_dir
@@ -376,42 +398,6 @@ impl TestUtil {
         track_paths.sort_by(|ea, eb| ea.file_name().cmp(&eb.file_name()));
 
         track_paths
-    }
-
-    pub fn load_testcase(testcase_path: &Path) -> AlbumTestcase {
-        let testcase_str = std::fs::read_to_string(testcase_path).expect("unable to read testcase file");
-
-        serde_json::from_str(&testcase_str).expect("unable to deserialize testcase")
-    }
-
-    pub fn analyze_albums(root_dir: &Path) {
-        let album_dirs = Self::collect_album_dirs(root_dir);
-
-        let mut n = 0;
-        for album_dir in album_dirs {
-            n += 1;
-
-            let album_dir_items = Self::collect_album_dir_items(&album_dir);
-
-            for album_dir_item in album_dir_items {
-                match TestReader::read_path(&album_dir_item) {
-                    Err(ReaderError::BadExt | ReaderError::NoExt) => continue,
-                    res => {
-                        let reader = res.expect("unable to read track");
-                    },
-                }
-            }
-
-            let mut album_dir = album_dir;
-            let testcase_path = {
-                album_dir.push(".json");
-                album_dir
-            };
-
-            let testcase = Self::load_testcase(&testcase_path);
-
-            println!("Analyzing testcase #{}: '{}'", n, testcase.name);
-        }
     }
 
     pub fn check_sox() -> bool {

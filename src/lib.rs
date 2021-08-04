@@ -51,9 +51,9 @@ mod tests {
     #[test]
     fn scan_custom_audio() {
         let custom_audio_dir = Path::new("audio");
-        let album_dirs = TestUtil::collect_album_dirs(&custom_audio_dir);
+        let album_testcases = TestUtil::collect_album_testcases(&custom_audio_dir);
 
-        for _album_dir in album_dirs {
+        for (_album_analysis, _album_root_dir) in album_testcases {
 
         }
     }
