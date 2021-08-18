@@ -356,16 +356,78 @@ impl TestUtil {
         album_dir_paths
     }
 
+    pub fn run_track_analysis<R, F>(track_reader: TestReader<R>, frame_callback: F) -> Analysis
+    where
+        R: Read,
+        F: FnMut([f64; MAX_CHANNELS]) -> (),
+    {
+        let mut frame_callback = frame_callback;
+
+        let sample_rate = track_reader.sample_rate();
+
+        let mut k_weighter = KWeightFilter::new(sample_rate);
+
+        let mut momentary_gater = MomentaryGatedPowers::new(sample_rate);
+        let mut shortterm_gater = ShorttermGatedPowers::new(sample_rate);
+
+        let mut momentary_loudness_calc = Loudness::new(G_WEIGHTS);
+        let mut shortterm_loudness_calc = Loudness::new(G_WEIGHTS);
+
+        for res_frame in track_reader {
+            let frame = res_frame.expect("unable to read frame");
+
+            // The K-weighting step is done before any momentary or
+            // shortterm calculations.
+            let filtered_frame = k_weighter.process(frame);
+
+            if let Some(momentary_gated_frame) = momentary_gater.try_process(filtered_frame) {
+                momentary_loudness_calc.push(momentary_gated_frame);
+            }
+
+            if let Some(shortterm_gated_frame) = shortterm_gater.try_process(filtered_frame) {
+                shortterm_loudness_calc.push(shortterm_gated_frame);
+            }
+
+            // Also feed the frame to the callback function.
+            frame_callback(frame);
+        }
+
+        let momentary_mean = momentary_loudness_calc.calculate().expect("unable to calculate momentary loudness for track");
+        let shortterm_mean = shortterm_loudness_calc.calculate().expect("unable to calculate shortterm loudness for track");
+
+        let track_analysis = Analysis {
+            momentary_mean,
+            momentary_maximum: 0.0,
+            momentary_range: 0.0,
+            shortterm_mean,
+            shortterm_maximum: 0.0,
+            shortterm_range: 0.0,
+        };
+
+        track_analysis
+    }
+
     pub fn run_album_analysis(album_dir: &Path) -> AlbumAnalysis {
-        // TODO: How to handle tracks with different sample rates?
         let track_bundles = Self::collect_track_bundles(album_dir);
 
         let mut track_analyses = Vec::with_capacity(track_bundles.len());
+
+        // Keep track of the sample rate across tracks.
+        // TODO: Should support be added for albums with tracks with different
+        //       sample rates?
+        let mut expected_sample_rate = None;
 
         for (track_path, load_func) in track_bundles {
             let track_reader = (load_func)(&track_path).expect("unable to read track file");
 
             let sample_rate = track_reader.sample_rate();
+
+            if let Some(r) = expected_sample_rate {
+                assert_eq!(r, sample_rate, "different sample rate for track: expected {}, got {}", r, sample_rate);
+            }
+            else {
+                expected_sample_rate = Some(sample_rate);
+            }
 
             let mut k_weighter = KWeightFilter::new(sample_rate);
 
