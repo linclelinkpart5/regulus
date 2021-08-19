@@ -15,7 +15,7 @@ use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result
 use serde::Deserialize;
 
 use crate::filter::KWeightFilter;
-use crate::gating::{MomentaryGatedPowers, ShorttermGatedPowers};
+use crate::gating::{GatingKind, GatedPowers};
 use crate::loudness::Loudness;
 
 const MAX_CHANNELS: usize = 5;
@@ -249,7 +249,7 @@ impl<R: Read> TestReader<R> {
         let signal = self.into_signal();
 
         let k_weighter = KWeightFilter::new(sample_rate);
-        let power_gater = MomentaryGatedPowers::new(sample_rate);
+        let power_gater = GatedPowers::new(sample_rate, GatingKind::Momentary);
 
         let filtered_signal = signal.process(k_weighter);
         let gated_signal = filtered_signal.blocking_process(power_gater);
@@ -367,8 +367,8 @@ impl TestUtil {
 
         let mut k_weighter = KWeightFilter::new(sample_rate);
 
-        let mut momentary_gater = MomentaryGatedPowers::new(sample_rate);
-        let mut shortterm_gater = ShorttermGatedPowers::new(sample_rate);
+        let mut momentary_gater = GatedPowers::new(sample_rate, GatingKind::Momentary);
+        let mut shortterm_gater = GatedPowers::new(sample_rate, GatingKind::ShortTerm);
 
         let mut momentary_loudness_calc = Loudness::new(G_WEIGHTS);
         let mut shortterm_loudness_calc = Loudness::new(G_WEIGHTS);
@@ -431,8 +431,8 @@ impl TestUtil {
 
             let mut k_weighter = KWeightFilter::new(sample_rate);
 
-            let mut momentary_gater = MomentaryGatedPowers::new(sample_rate);
-            let mut shortterm_gater = ShorttermGatedPowers::new(sample_rate);
+            let mut momentary_gater = GatedPowers::new(sample_rate, GatingKind::Momentary);
+            let mut shortterm_gater = GatedPowers::new(sample_rate, GatingKind::ShortTerm);
 
             let mut momentary_loudness_calc = Loudness::new(G_WEIGHTS);
             let mut shortterm_loudness_calc = Loudness::new(G_WEIGHTS);

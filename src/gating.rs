@@ -9,7 +9,24 @@ const MOMENTARY_LENGTH_MS: u64 = 400;
 const SHORTTERM_DELTA_MS: u64 = 3000;
 const SHORTTERM_LENGTH_MS: u64 = 1000;
 
-pub struct GatedPowers<F, const N: usize, const LEN: u64, const DELTA: u64>
+#[derive(Copy, Clone)]
+pub enum GatingKind {
+    Momentary,
+    ShortTerm,
+    Custom { gate_len_ms: u64, delta_len_ms: u64 },
+}
+
+impl GatingKind {
+    pub(crate) fn len_ms(self) -> (u64, u64) {
+        match self {
+            Self::Momentary => (MOMENTARY_LENGTH_MS, MOMENTARY_DELTA_MS),
+            Self::ShortTerm => (SHORTTERM_LENGTH_MS, SHORTTERM_DELTA_MS),
+            Self::Custom { gate_len_ms, delta_len_ms } => (gate_len_ms, delta_len_ms),
+        }
+    }
+}
+
+pub struct GatedPowers<F, const N: usize>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -19,20 +36,22 @@ where
     delta: usize,
 }
 
-impl<F, const N: usize, const LEN: u64, const DELTA: u64> GatedPowers<F, N, LEN, DELTA>
+impl<F, const N: usize> GatedPowers<F, N>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
 {
-    pub fn new(sample_rate: u32) -> Self {
+    pub fn new(sample_rate: u32, gating_kind: GatingKind) -> Self {
+        let (gate_len_ms, delta_len_ms) = gating_kind.len_ms();
+
         // Calculate the gate length, in frames.
         // This will in turn determine the length of the mean squares buffer.
-        let gate_buffer_len = Util::ms_to_samples(LEN, sample_rate) as usize;
+        let gate_buffer_len = Util::ms_to_samples(gate_len_ms, sample_rate) as usize;
 
         // Number of frames to add at a time for each iteration after the first.
         // This is the number of steps to advance the mean squares iterator for
         // each iteration (i.e. the "step-by" amount).
-        let frames_per_delta = Util::ms_to_samples(DELTA, sample_rate) as usize;
+        let frames_per_delta = Util::ms_to_samples(delta_len_ms, sample_rate) as usize;
 
         assert!(frames_per_delta > 0);
 
@@ -48,7 +67,7 @@ where
     }
 }
 
-impl<F, const N: usize, const LEN: u64, const DELTA: u64> BlockingProcessor<N, N> for GatedPowers<F, N, LEN, DELTA>
+impl<F, const N: usize> BlockingProcessor<N, N> for GatedPowers<F, N>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -68,8 +87,6 @@ where
     }
 }
 
-pub type MomentaryGatedPowers<F, const N: usize> = GatedPowers<F, N, MOMENTARY_LENGTH_MS, MOMENTARY_DELTA_MS>;
-pub type ShorttermGatedPowers<F, const N: usize> = GatedPowers<F, N, SHORTTERM_LENGTH_MS, SHORTTERM_DELTA_MS>;
 
 #[cfg(test)]
 mod tests {
