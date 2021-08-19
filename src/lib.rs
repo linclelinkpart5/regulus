@@ -1,10 +1,11 @@
-#![feature(bool_to_option, option_result_contains)]
+#![feature(array_methods, array_zip, bool_to_option, option_result_contains)]
 
 pub mod filter;
 pub mod util;
 pub mod gating;
 pub mod loudness;
 pub mod peak;
+pub mod pipeline;
 
 pub(crate) mod test_util;
 
