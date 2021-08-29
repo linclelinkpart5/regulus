@@ -61,7 +61,7 @@ where
 
         Self {
             ms_state,
-            i: frames_per_delta - 1,
+            i: usize::MAX,
             delta: frames_per_delta,
         }
     }
