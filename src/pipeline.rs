@@ -1,4 +1,4 @@
-use sampara::{Frame, Calculator, Processor, BlockingProcessor};
+use sampara::{Frame, Calculator, Processor};
 
 use crate::filter::KWeightFilter;
 use crate::gating::{GatedPowers, GatingKind};
@@ -30,7 +30,7 @@ where
     }
 }
 
-impl<F, const N: usize, const P: usize> Calculator<N> for Pipeline<F, N, P>
+impl<F, const N: usize, const P: usize> Calculator for Pipeline<F, N, P>
 where
     F: Frame<N, Sample = f64>,
 {
@@ -41,7 +41,7 @@ where
         let filtered_frame = self.k_filter.process(input);
 
         let opt_powers = self.gated_power_pipelines.each_mut().map(|gpp| {
-            gpp.try_process(filtered_frame)
+            gpp.process(filtered_frame)
         });
 
         self.loudness_pipelines.each_mut().zip(opt_powers).map(|(lp, opt_power)| {

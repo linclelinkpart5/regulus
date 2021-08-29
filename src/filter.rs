@@ -67,7 +67,7 @@ where
     }
 }
 
-impl<F, const N: usize> Processor<N, N> for KWeightFilter<F, N>
+impl<F, const N: usize> Processor for KWeightFilter<F, N>
 where
     F: Frame<N, Sample = f64>,
 {

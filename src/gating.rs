@@ -1,4 +1,4 @@
-use sampara::{Frame, BlockingProcessor};
+use sampara::{Frame, Processor};
 use sampara::stats::LazyMovingMs;
 use sampara::sample::FloatSample;
 
@@ -67,15 +67,15 @@ where
     }
 }
 
-impl<F, const N: usize> BlockingProcessor<N, N> for GatedPowers<F, N>
+impl<F, const N: usize> Processor for GatedPowers<F, N>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
 {
     type Input = F;
-    type Output = F;
+    type Output = Option<F>;
 
-    fn try_process(&mut self, input: Self::Input) -> Option<Self::Output> {
+    fn process(&mut self, input: Self::Input) -> Self::Output {
         let ms_power = self.ms_state.try_process(input)?;
 
         // We only want to output the frame if it is the end of a delta.

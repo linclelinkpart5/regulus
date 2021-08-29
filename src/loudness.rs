@@ -1,6 +1,5 @@
-use sampara::{Frame, Signal};
+use sampara::Frame;
 use sampara::Calculator;
-use sampara::sample::FloatSample;
 use sampara::stats::CumulativeMean;
 
 use crate::util::Util;
@@ -98,7 +97,7 @@ where
     }
 }
 
-impl<F, const N: usize> Calculator<N> for Loudness<F, N>
+impl<F, const N: usize> Calculator for Loudness<F, N>
 where
     F: Frame<N, Sample = f64>,
 {

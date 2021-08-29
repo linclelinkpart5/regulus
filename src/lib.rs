@@ -42,7 +42,7 @@ mod tests {
         let power_gater = GatedPowers::new(SAMPLE_RATE as u32, GatingKind::Momentary);
 
         let filtered_signal = signal.process(k_weighter);
-        let gated_signal = filtered_signal.blocking_process(power_gater);
+        let gated_signal = filtered_signal.process_lazy(power_gater);
 
         let loudness = gated_signal.calculate(Loudness::new(G_WEIGHTS)).unwrap();
 

@@ -9,7 +9,7 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-use sampara::{Frame, Signal, Processor, BlockingProcessor};
+use sampara::{Frame, Signal, Processor};
 use sampara::signal::FromFrames as SignalFromFrames;
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 use serde::Deserialize;
@@ -252,7 +252,7 @@ impl<R: Read> TestReader<R> {
         let power_gater = GatedPowers::new(sample_rate, GatingKind::Momentary);
 
         let filtered_signal = signal.process(k_weighter);
-        let gated_signal = filtered_signal.blocking_process(power_gater);
+        let gated_signal = filtered_signal.process_lazy(power_gater);
 
         let loudness = gated_signal.calculate(Loudness::new(G_WEIGHTS)).unwrap();
 
@@ -380,11 +380,11 @@ impl TestUtil {
             // shortterm calculations.
             let filtered_frame = k_weighter.process(frame);
 
-            if let Some(momentary_gated_frame) = momentary_gater.try_process(filtered_frame) {
+            if let Some(momentary_gated_frame) = momentary_gater.process(filtered_frame) {
                 momentary_loudness_calc.push(momentary_gated_frame);
             }
 
-            if let Some(shortterm_gated_frame) = shortterm_gater.try_process(filtered_frame) {
+            if let Some(shortterm_gated_frame) = shortterm_gater.process(filtered_frame) {
                 shortterm_loudness_calc.push(shortterm_gated_frame);
             }
 
@@ -444,11 +444,11 @@ impl TestUtil {
                 // shortterm calculations.
                 let filtered_frame = k_weighter.process(frame);
 
-                if let Some(momentary_gated_frame) = momentary_gater.try_process(filtered_frame) {
+                if let Some(momentary_gated_frame) = momentary_gater.process(filtered_frame) {
                     momentary_loudness_calc.push(momentary_gated_frame);
                 }
 
-                if let Some(shortterm_gated_frame) = shortterm_gater.try_process(filtered_frame) {
+                if let Some(shortterm_gated_frame) = shortterm_gater.process(filtered_frame) {
                     shortterm_loudness_calc.push(shortterm_gated_frame);
                 }
             }
