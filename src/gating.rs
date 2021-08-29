@@ -1,4 +1,4 @@
-use sampara::{Frame, Processor};
+use sampara::{Frame, StatefulProcessor};
 use sampara::stats::BufferedMovingMs;
 use sampara::sample::FloatSample;
 
@@ -61,13 +61,13 @@ where
 
         Self {
             ms_state,
-            i: 0,
+            i: frames_per_delta - 1,
             delta: frames_per_delta,
         }
     }
 }
 
-impl<F, const N: usize> Processor for GatedPowers<F, N>
+impl<F, const N: usize> StatefulProcessor for GatedPowers<F, N>
 where
     F: Frame<N>,
     F::Sample: FloatSample,
@@ -75,15 +75,29 @@ where
     type Input = F;
     type Output = Option<F>;
 
-    fn process(&mut self, input: Self::Input) -> Self::Output {
-        let ms_power = self.ms_state.process(input)?;
+    fn advance(&mut self, input: Self::Input) {
+        let was_active = self.ms_state.is_active();
+        self.ms_state.advance(input);
+        let now_active = self.ms_state.is_active();
 
+        if now_active {
+            if was_active {
+                self.i = (self.i + 1) % self.delta;
+            }
+            else {
+                self.i = 0;
+            }
+        }
+    }
+
+    fn current(&self) -> Self::Output {
         // We only want to output the frame when a new delta is starting.
-        let do_emit = self.i == 0;
-
-        self.i = (self.i + 1) % self.delta;
-
-        do_emit.then_some(ms_power)
+        if self.i == 0 {
+            self.ms_state.current()
+        }
+        else {
+            None
+        }
     }
 }
 
