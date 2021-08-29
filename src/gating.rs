@@ -1,5 +1,5 @@
 use sampara::{Frame, Processor};
-use sampara::stats::LazyMovingMs;
+use sampara::stats::BufferedMovingMs;
 use sampara::sample::FloatSample;
 
 use crate::util::Util;
@@ -31,7 +31,7 @@ where
     F: Frame<N>,
     F::Sample: FloatSample,
 {
-    ms_state: LazyMovingMs<Vec<F>, N>,
+    ms_state: BufferedMovingMs<Vec<F>, N>,
     i: usize,
     delta: usize,
 }
@@ -57,7 +57,7 @@ where
 
         let buffer = vec![Frame::EQUILIBRIUM; gate_buffer_len];
 
-        let ms_state = LazyMovingMs::from(buffer);
+        let ms_state = BufferedMovingMs::from(buffer);
 
         Self {
             ms_state,
@@ -76,9 +76,9 @@ where
     type Output = Option<F>;
 
     fn process(&mut self, input: Self::Input) -> Self::Output {
-        let ms_power = self.ms_state.try_process(input)?;
+        let ms_power = self.ms_state.process(input)?;
 
-        // We only want to output the frame if it is the end of a delta.
+        // We only want to output the frame when a new delta is starting.
         let do_emit = self.i == 0;
 
         self.i = (self.i + 1) % self.delta;
