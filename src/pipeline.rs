@@ -1,54 +1,59 @@
-use sampara::{Frame, Calculator};
+// use std::collections::HashMap;
 
-use crate::filter::KWeightFilter;
-use crate::gated_loudness::{GatingKind, GatedPowers, Loudness};
+// use sampara::{Frame, Calculator};
 
-pub struct Pipeline<F, const N: usize, const P: usize>
-where
-    F: Frame<N, Sample = f64>,
-{
-    k_filter: KWeightFilter<F, N>,
-    gated_power_pipelines: [GatedPowers<F, N>; P],
-    loudness_pipelines: [Loudness<F, N>; P],
-}
+// use crate::filter::KWeightFilter;
+// use crate::gated_loudness::{Gating, GatedLoudness};
 
-impl<F, const N: usize, const P: usize> Pipeline<F, N, P>
-where
-    F: Frame<N, Sample = f64>,
-{
-    pub fn new(sample_rate: u32, gating_kinds: [GatingKind; P], g_weights: F) -> Self {
-        let k_filter = KWeightFilter::new(sample_rate);
-        let gated_power_pipelines = gating_kinds.map(|k| GatedPowers::new(sample_rate, k));
-        let loudness_pipelines = gating_kinds.map(|_| Loudness::new(g_weights));
+// pub struct PipelineBuilder
 
-        Self {
-            k_filter,
-            gated_power_pipelines,
-            loudness_pipelines,
-        }
-    }
-}
+// pub struct Pipeline<F, const N: usize>
+// where
+//     F: Frame<N, Sample = f64>,
+// {
+//     k_filter: KWeightFilter<F, N>,
+//     gated_loudness_specs: HashMap<Gating, GatedLoudness<F, N>>,
+// }
 
-impl<F, const N: usize, const P: usize> Calculator for Pipeline<F, N, P>
-where
-    F: Frame<N, Sample = f64>,
-{
-    type Input = F;
-    type Output = [Option<f64>; P];
+// impl<F, const N: usize> Pipeline<F, N>
+// where
+//     F: Frame<N, Sample = f64>,
+// {
+//     pub fn new(sample_rate: u32, g_weights: F) -> Self {
+//         let k_filter = KWeightFilter::new(sample_rate);
+//         let gated_loudness_specs = HashMap::new();
 
-    fn push(&mut self, input: Self::Input) {
-        let filtered_frame = self.k_filter.process(input);
+//         Self {
+//             k_filter,
+//             gated_loudness_specs,
+//         }
+//     }
 
-        let opt_powers = self.gated_power_pipelines.each_mut().map(|gpp| {
-            gpp.process(filtered_frame)
-        });
+//     pub fn is_noop(&self) -> bool {
+//         self.gated_loudness_specs.is_empty()
+//     }
+// }
 
-        self.loudness_pipelines.each_mut().zip(opt_powers).map(|(lp, opt_power)| {
-            opt_power.map(|p| lp.push(p))
-        });
-    }
+// impl<F, const N: usize> Calculator for Pipeline<F, N>
+// where
+//     F: Frame<N, Sample = f64>,
+// {
+//     type Input = F;
+//     type Output = [Option<f64>; P];
 
-    fn calculate(self) -> Self::Output {
-        self.loudness_pipelines.map(|lp| lp.calculate())
-    }
-}
+//     fn push(&mut self, input: Self::Input) {
+//         let filtered_frame = self.k_filter.process(input);
+
+//         let opt_powers = self.gated_power_pipelines.each_mut().map(|gpp| {
+//             gpp.process(filtered_frame)
+//         });
+
+//         self.loudness_pipelines.each_mut().zip(opt_powers).map(|(lp, opt_power)| {
+//             opt_power.map(|p| lp.push(p))
+//         });
+//     }
+
+//     fn calculate(self) -> Self::Output {
+//         self.loudness_pipelines.map(|lp| lp.calculate())
+//     }
+// }

@@ -5,26 +5,24 @@ use sampara::sample::FloatSample;
 use crate::util::Util;
 
 const MOMENTARY_DELTA_MS: u64 = 100;
-const MOMENTARY_LENGTH_MS: u64 = 400;
+const MOMENTARY_GATE_MS: u64 = 400;
 const SHORTTERM_DELTA_MS: u64 = 3000;
-const SHORTTERM_LENGTH_MS: u64 = 1000;
+const SHORTTERM_GATE_MS: u64 = 1000;
 
-#[derive(Copy, Clone)]
-pub enum GatingKind {
-    Momentary,
-    ShortTerm,
-    Custom { gate_len_ms: u64, delta_len_ms: u64 },
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Gating {
+    pub gate_len_ms: u64,
+    pub delta_len_ms: u64,
 }
 
-impl GatingKind {
-    pub(crate) fn len_ms(self) -> (u64, u64) {
-        match self {
-            Self::Momentary => (MOMENTARY_LENGTH_MS, MOMENTARY_DELTA_MS),
-            Self::ShortTerm => (SHORTTERM_LENGTH_MS, SHORTTERM_DELTA_MS),
-            Self::Custom { gate_len_ms, delta_len_ms } => (gate_len_ms, delta_len_ms),
-        }
-    }
-}
+pub const MOMENTARY_GATING: Gating = Gating {
+    gate_len_ms: MOMENTARY_GATE_MS,
+    delta_len_ms: MOMENTARY_DELTA_MS,
+};
+pub const SHORTTERM_GATING: Gating = Gating {
+    gate_len_ms: SHORTTERM_GATE_MS,
+    delta_len_ms: SHORTTERM_DELTA_MS,
+};
 
 pub struct GatedPowers<F, const N: usize>
 where
@@ -41,17 +39,15 @@ where
     F: Frame<N>,
     F::Sample: FloatSample,
 {
-    pub fn new(sample_rate: u32, gating_kind: GatingKind) -> Self {
-        let (gate_len_ms, delta_len_ms) = gating_kind.len_ms();
-
+    pub fn custom(gating: Gating, sample_rate: u32) -> Self {
         // Calculate the gate length, in frames.
         // This will in turn determine the length of the mean squares buffer.
-        let gate_buffer_len = Util::ms_to_samples(gate_len_ms, sample_rate) as usize;
+        let gate_buffer_len = Util::ms_to_samples(gating.gate_len_ms, sample_rate) as usize;
 
         // Number of frames to add at a time for each iteration after the first.
         // This is the number of steps to advance the mean squares iterator for
         // each iteration (i.e. the "step-by" amount).
-        let frames_per_delta = Util::ms_to_samples(delta_len_ms, sample_rate) as usize;
+        let frames_per_delta = Util::ms_to_samples(gating.delta_len_ms, sample_rate) as usize;
 
         assert!(frames_per_delta > 0);
 
@@ -64,6 +60,14 @@ where
             i: usize::MAX,
             delta: frames_per_delta,
         }
+    }
+
+    pub fn momentary(sample_rate: u32) -> Self {
+        Self::custom(MOMENTARY_GATING, sample_rate)
+    }
+
+    pub fn shortterm(sample_rate: u32) -> Self {
+        Self::custom(SHORTTERM_GATING, sample_rate)
     }
 
     pub fn process(&mut self, input: F) -> Option<F> {
