@@ -1,5 +1,4 @@
-use sampara::Frame;
-use sampara::Calculator;
+use sampara::{Frame, Calculator};
 use sampara::stats::CumulativeMean;
 
 use crate::util::Util;
@@ -12,7 +11,6 @@ where
 {
     abs_averager: CumulativeMean<F, N>,
     abs_loud_frames: Vec<(f64, F)>,
-    count: usize,
     g_weights: F,
 }
 
@@ -24,7 +22,6 @@ where
         Self {
             abs_averager: CumulativeMean::default(),
             abs_loud_frames: Vec::new(),
-            count: 0,
             g_weights,
         }
     }
@@ -39,12 +36,10 @@ where
             self.abs_averager.advance(gated_powers);
             self.abs_loud_frames.push((frame_loudness, gated_powers))
         }
-
-        self.count += 1;
     }
 
     pub fn is_empty(&self) -> bool {
-        self.count == 0
+        self.abs_averager.is_empty()
     }
 
     pub fn reset(&mut self) {
@@ -52,48 +47,45 @@ where
     }
 
     pub fn calculate(self) -> Option<f64> {
-        println!("Num gates processed: {}", self.count);
+        let Self { abs_averager, abs_loud_frames, g_weights, .. } = self;
 
-        if self.count > 0 {
-            let g_weights = self.g_weights;
+        println!("Num gates processed: {}", abs_averager.count());
 
-            let Self { abs_averager, abs_loud_frames, .. } = self;
+        // This performs the calculation done in equation #5 in the ITU BS.1770
+        // tech spec. This is the loudness of the average of the per-channel
+        // power of frames that were marked as "loud" (i.e. frames with
+        // loudness above the absolute loudness threshold) during the initial
+        // pass.
+        let abs_avg_gated_power = abs_averager.try_current()?;
+        let abs_loudness = Util::loudness(abs_avg_gated_power, g_weights);
+        println!("Absolute loudness: {} LKFS", abs_loudness);
 
-            // This performs the calculation done in equation #5 in the ITU BS.1770
-            // tech spec. This is the loudness of the average of the per-channel
-            // power of frames that were marked as "loud" (i.e. frames with
-            // loudness above the absolute loudness threshold) during the initial
-            // pass.
-            let abs_loudness = Util::loudness(abs_averager.current(), g_weights);
-            println!("Absolute loudness: {} LKFS", abs_loudness);
+        // This performs the calculation done in equation #6 in the ITU BS.1770
+        // tech spec. The relative loudness threshold is the absolute loudness
+        // minus 10.0.
+        let rel_loudness_thresh = abs_loudness - 10.0;
+        println!("Relative threshold: {} LKFS", rel_loudness_thresh);
 
-            // This performs the calculation done in equation #6 in the ITU BS.1770
-            // tech spec. The relative loudness threshold is the absolute loudness
-            // minus 10.0.
-            let rel_loudness_thresh = abs_loudness - 10.0;
-            println!("Relative threshold: {} LKFS", rel_loudness_thresh);
+        // This performs the calculation done in equation #7 in the ITU BS.1770
+        // tech spec. From the collection of saved frames that were marked as
+        // "absolutely loud", only those that exceed the relative loudness
+        // threshold need to be selected and averaged.
+        let mut rel_averager = CumulativeMean::default();
 
-            // This performs the calculation done in equation #7 in the ITU BS.1770
-            // tech spec. From the collection of saved frames that were marked as
-            // "absolutely loud", only those that exceed the relative loudness
-            // threshold need to be selected and averaged.
-            let mut rel_averager = CumulativeMean::default();
-
-            for (frame_loudness, channel_powers) in abs_loud_frames {
-                // These frames are already known to be above the absolute loudness
-                // threshold. For this calculation however, they also need to be
-                // over the relative loudness threshold.
-                if frame_loudness > rel_loudness_thresh {
-                    rel_averager.advance(channel_powers)
-                }
+        for (frame_loudness, channel_powers) in abs_loud_frames {
+            // These frames are already known to be above the absolute loudness
+            // threshold. However, for this calculation they also need to be
+            // above the relative loudness threshold.
+            if frame_loudness > rel_loudness_thresh {
+                rel_averager.advance(channel_powers)
             }
-
-            let rel_loudness = Util::loudness(rel_averager.current(), g_weights);
-            println!("Relative loudness: {} LKFS", rel_loudness);
-
-            Some(rel_loudness)
         }
-        else { None }
+
+        let rel_avg_gated_power = rel_averager.try_current()?;
+        let rel_loudness = Util::loudness(rel_avg_gated_power, g_weights);
+        println!("Relative loudness: {} LKFS", rel_loudness);
+
+        Some(rel_loudness)
     }
 }
 
