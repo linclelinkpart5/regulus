@@ -1,4 +1,4 @@
-use sampara::{Frame, StatefulProcessor};
+use sampara::{Frame, StatefulProcessor, Processor};
 use sampara::stats::BufferedMovingMs;
 use sampara::sample::FloatSample;
 
@@ -64,6 +64,10 @@ where
             i: usize::MAX,
             delta: frames_per_delta,
         }
+    }
+
+    pub fn process(&mut self, input: F) -> Option<F> {
+        Processor::process(self, input)
     }
 }
 

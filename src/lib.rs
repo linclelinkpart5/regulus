@@ -2,16 +2,14 @@
 
 pub mod filter;
 pub mod util;
-pub mod gating;
-pub mod loudness;
+pub mod gated_loudness;
 pub mod peak;
 pub mod pipeline;
 
 pub(crate) mod test_util;
 
 pub use filter::KWeightFilter;
-pub use gating::{GatedPowers, GatingKind};
-pub use loudness::Loudness;
+pub use gated_loudness::{GatedPowers, GatingKind, Loudness};
 
 #[cfg(test)]
 mod tests {

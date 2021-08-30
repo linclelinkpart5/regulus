@@ -9,14 +9,12 @@ use std::process::{Command, Output};
 use byteorder::{ByteOrder, LittleEndian};
 use claxon::{Error as ClaxonError, FlacReader, FlacIntoSamples, Result as ClaxonResult};
 use claxon::input::BufferedReader;
-use sampara::{Frame, Signal, Processor};
-use sampara::signal::FromFrames as SignalFromFrames;
+use sampara::{Frame, Signal};
 use hound::{Error as HoundError, WavReader, WavIntoSamples, SampleFormat, Result as HoundResult};
 use serde::Deserialize;
 
 use crate::filter::KWeightFilter;
-use crate::gating::{GatingKind, GatedPowers};
-use crate::loudness::Loudness;
+use crate::gated_loudness::{GatingKind, GatedPowers, Loudness};
 
 const MAX_CHANNELS: usize = 5;
 const G_WEIGHTS: [f64; MAX_CHANNELS] = [1.0, 1.0, 1.0, 1.41, 1.41];
@@ -260,10 +258,10 @@ impl<R: Read> TestReader<R> {
     }
 }
 
-type LoadFunc = fn(&Path) -> Result<TestReader<File>, ReaderError>;
+type ReaderFunc = fn(&Path) -> Result<TestReader<File>, ReaderError>;
 
 impl TestReader<File> {
-    pub fn deduce_load_func(track_path: &Path) -> Result<LoadFunc, ReaderError> {
+    pub fn get_reader_func(track_path: &Path) -> Result<ReaderFunc, ReaderError> {
         let ext = track_path
             .extension()
             .ok_or(ReaderError::NoExt)?;
@@ -278,7 +276,7 @@ impl TestReader<File> {
     }
 
     pub fn read_track(track_path: &Path) -> Result<Self, ReaderError> {
-        let loader = Self::deduce_load_func(track_path)?;
+        let loader = Self::get_reader_func(track_path)?;
 
         (loader)(track_path)
     }
@@ -388,12 +386,14 @@ impl TestUtil {
                 shortterm_loudness_calc.push(shortterm_gated_frame);
             }
 
-            // Also feed the frame to the callback function.
+            // Also feed the original frame to the callback function.
             frame_callback(frame);
         }
 
-        let momentary_mean = momentary_loudness_calc.calculate().expect("unable to calculate momentary loudness for track");
-        let shortterm_mean = shortterm_loudness_calc.calculate().expect("unable to calculate shortterm loudness for track");
+        let momentary_mean = momentary_loudness_calc.calculate()
+            .expect("unable to calculate momentary loudness for track");
+        let shortterm_mean = shortterm_loudness_calc.calculate()
+            .expect("unable to calculate shortterm loudness for track");
 
         let track_analysis = Analysis {
             momentary_mean,
@@ -500,7 +500,7 @@ impl TestUtil {
     //     testcase_paths
     // }
 
-    pub fn collect_track_bundles(album_dir: &Path) -> Vec<(PathBuf, LoadFunc)> {
+    pub fn collect_track_bundles(album_dir: &Path) -> Vec<(PathBuf, ReaderFunc)> {
         let read_dir = std::fs::read_dir(album_dir).expect("cannot read album dir");
 
         let mut track_paths = read_dir
@@ -513,7 +513,7 @@ impl TestUtil {
 
                 let track_path = dir_entry.path();
 
-                let load_func = TestReader::deduce_load_func(&track_path).expect("unknown track format");
+                let load_func = TestReader::get_reader_func(&track_path).expect("unknown track format");
 
                 (track_path, load_func)
             })

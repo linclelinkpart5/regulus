@@ -65,6 +65,10 @@ where
 
         Self { bq_shelving, bq_highpass }
     }
+
+    pub fn process(&mut self, input: F) -> F {
+        Processor::process(self, input)
+    }
 }
 
 impl<F, const N: usize> Processor for KWeightFilter<F, N>

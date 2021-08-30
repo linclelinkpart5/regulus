@@ -1,8 +1,7 @@
-use sampara::{Frame, Calculator, Processor};
+use sampara::{Frame, Calculator};
 
 use crate::filter::KWeightFilter;
-use crate::gating::{GatedPowers, GatingKind};
-use crate::loudness::Loudness;
+use crate::gated_loudness::{GatingKind, GatedPowers, Loudness};
 
 pub struct Pipeline<F, const N: usize, const P: usize>
 where
