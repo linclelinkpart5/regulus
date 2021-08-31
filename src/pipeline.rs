@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use sampara::{Frame, Calculator};
 
 use crate::filter::KWeightFilter;
-use crate::gated_loudness::{Gating, GatedLoudness, MOMENTARY_GATING, SHORTTERM_GATING};
+use crate::gated_loudness::{Gating, GatedLoudness};
 
 pub struct PipelineBuilder<F, const N: usize>
 where
@@ -27,17 +27,24 @@ where
     }
 
     #[inline]
-    pub fn custom_gating(&mut self, gating: Gating) -> &mut Self {
+    pub fn gating(&mut self, gating: Gating) -> &mut Self {
         self.gatings.insert(gating);
         self
     }
 
-    pub fn momentary_gating(&mut self) -> &mut Self {
-        self.custom_gating(MOMENTARY_GATING)
+    #[inline]
+    pub fn momentary(&mut self) -> &mut Self {
+        self.gating(Gating::Momentary)
     }
 
-    pub fn shortterm_gating(&mut self) -> &mut Self {
-        self.custom_gating(SHORTTERM_GATING)
+    #[inline]
+    pub fn shortterm(&mut self) -> &mut Self {
+        self.gating(Gating::Shortterm)
+    }
+
+    #[inline]
+    pub fn custom(&mut self, gate_len_ms: u64, delta_len_ms: u64) -> &mut Self {
+        self.gating(Gating::Custom { gate_len_ms, delta_len_ms })
     }
 
     pub fn build(&mut self) -> Pipeline<F, N> {
@@ -46,7 +53,7 @@ where
 
         let k_filter = KWeightFilter::new(sample_rate);
         let gated_loudness_map = self.gatings.drain()
-            .map(|g| (g, GatedLoudness::custom(g, sample_rate, g_weights)))
+            .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect::<HashMap<_, _>>();
 
         Pipeline {

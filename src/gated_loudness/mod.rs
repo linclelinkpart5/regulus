@@ -18,8 +18,8 @@ impl<F, const N: usize> GatedLoudness<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
-    pub fn custom(gating: Gating, sample_rate: u32, g_weights: F) -> Self {
-        let gated_powers = GatedPowers::custom(gating, sample_rate);
+    pub fn new(sample_rate: u32, g_weights: F, gating: Gating) -> Self {
+        let gated_powers = GatedPowers::new(sample_rate, gating);
         let loudness = Loudness::new(g_weights);
 
         Self {
@@ -29,11 +29,15 @@ where
     }
 
     pub fn momentary(sample_rate: u32, g_weights: F) -> Self {
-        Self::custom(MOMENTARY_GATING, sample_rate, g_weights)
+        Self::new(sample_rate, g_weights, Gating::Momentary)
     }
 
     pub fn shortterm(sample_rate: u32, g_weights: F) -> Self {
-        Self::custom(SHORTTERM_GATING, sample_rate, g_weights)
+        Self::new(sample_rate, g_weights, Gating::Shortterm)
+    }
+
+    pub fn custom(sample_rate: u32, g_weights: F, gate_len_ms: u64, delta_len_ms: u64) -> Self {
+        Self::new(sample_rate, g_weights, Gating::Custom { gate_len_ms, delta_len_ms })
     }
 }
 

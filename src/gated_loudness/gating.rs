@@ -10,19 +10,11 @@ const SHORTTERM_DELTA_MS: u64 = 3000;
 const SHORTTERM_GATE_MS: u64 = 1000;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Gating {
-    pub gate_len_ms: u64,
-    pub delta_len_ms: u64,
+pub enum Gating {
+    Momentary,
+    Shortterm,
+    Custom { gate_len_ms: u64, delta_len_ms: u64 },
 }
-
-pub const MOMENTARY_GATING: Gating = Gating {
-    gate_len_ms: MOMENTARY_GATE_MS,
-    delta_len_ms: MOMENTARY_DELTA_MS,
-};
-pub const SHORTTERM_GATING: Gating = Gating {
-    gate_len_ms: SHORTTERM_GATE_MS,
-    delta_len_ms: SHORTTERM_DELTA_MS,
-};
 
 pub struct GatedPowers<F, const N: usize>
 where
@@ -39,15 +31,21 @@ where
     F: Frame<N>,
     F::Sample: FloatSample,
 {
-    pub fn custom(gating: Gating, sample_rate: u32) -> Self {
+    pub fn new(sample_rate: u32, gating: Gating) -> Self {
+        let (gate_len_ms, delta_len_ms) = match gating {
+            Gating::Momentary => (MOMENTARY_GATE_MS, MOMENTARY_DELTA_MS),
+            Gating::Shortterm => (SHORTTERM_GATE_MS, SHORTTERM_DELTA_MS),
+            Gating::Custom { gate_len_ms: g, delta_len_ms: d } => (g, d),
+        };
+
         // Calculate the gate length, in frames.
         // This will in turn determine the length of the mean squares buffer.
-        let gate_buffer_len = Util::ms_to_samples(gating.gate_len_ms, sample_rate) as usize;
+        let gate_buffer_len = Util::ms_to_samples(gate_len_ms, sample_rate) as usize;
 
         // Number of frames to add at a time for each iteration after the first.
         // This is the number of steps to advance the mean squares iterator for
         // each iteration (i.e. the "step-by" amount).
-        let frames_per_delta = Util::ms_to_samples(gating.delta_len_ms, sample_rate) as usize;
+        let frames_per_delta = Util::ms_to_samples(delta_len_ms, sample_rate) as usize;
 
         assert!(frames_per_delta > 0);
 
@@ -63,11 +61,15 @@ where
     }
 
     pub fn momentary(sample_rate: u32) -> Self {
-        Self::custom(MOMENTARY_GATING, sample_rate)
+        Self::new(sample_rate, Gating::Momentary)
     }
 
     pub fn shortterm(sample_rate: u32) -> Self {
-        Self::custom(SHORTTERM_GATING, sample_rate)
+        Self::new(sample_rate, Gating::Shortterm)
+    }
+
+    pub fn custom(sample_rate: u32, gate_len_ms: u64, delta_len_ms: u64) -> Self {
+        Self::new(sample_rate, Gating::Custom { gate_len_ms, delta_len_ms })
     }
 
     pub fn process(&mut self, input: F) -> Option<F> {
