@@ -1,4 +1,4 @@
-#![feature(array_methods, array_zip, bool_to_option, option_result_contains)]
+#![feature(array_methods, array_zip, bool_to_option, box_into_inner, option_result_contains)]
 
 pub mod filter;
 pub mod util;
