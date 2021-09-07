@@ -4,10 +4,10 @@ use sampara::sample::FloatSample;
 
 use crate::util::Util;
 
-const MOMENTARY_DELTA_MS: u64 = 100;
 const MOMENTARY_GATE_MS: u64 = 400;
-const SHORTTERM_DELTA_MS: u64 = 3000;
-const SHORTTERM_GATE_MS: u64 = 1000;
+const MOMENTARY_DELTA_MS: u64 = 100;
+const SHORTTERM_GATE_MS: u64 = 3000;
+const SHORTTERM_DELTA_MS: u64 = 1000;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Gating {
