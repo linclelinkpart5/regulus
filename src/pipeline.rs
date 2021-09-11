@@ -140,6 +140,43 @@ where
     layers: Vec<PipelineLayer<F, N>>,
 }
 
+impl<F, const N: usize> LayeredPipeline<F, N>
+where
+    F: Frame<N, Sample = f64>,
+{
+    pub fn push_frame(&mut self, frame: F) {
+        for layer in self.layers.iter_mut() {
+            layer.push(frame);
+        }
+    }
+
+    pub fn push_layer(&mut self) {
+        let sample_rate = self.sample_rate;
+        let g_weights = self.g_weights;
+
+        let k_filter = KWeightFilter::new(sample_rate);
+        let momentary_gl = self.calc_momentary.then(|| GatedLoudness::momentary(sample_rate, g_weights));
+        let shortterm_gl = self.calc_shortterm.then(|| GatedLoudness::shortterm(sample_rate, g_weights));
+        let custom_gl_map = self.custom_gatings
+            .iter()
+            .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
+            .collect::<HashMap<_, _>>();
+
+        let new_layer = PipelineLayer {
+            k_filter,
+            momentary_gl,
+            shortterm_gl,
+            custom_gl_map,
+        };
+
+        self.layers.push(new_layer);
+    }
+
+    pub fn pop_layer(&mut self) -> Option<Output> {
+        self.layers.pop().map(|l| l.calculate())
+    }
+}
+
 pub struct Pipeline<F, const N: usize>
 where
     F: Frame<N, Sample = f64>,
