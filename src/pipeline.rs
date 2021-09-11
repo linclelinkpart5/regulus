@@ -55,6 +55,75 @@ where
     }
 }
 
+pub struct PipelineLayer<F, const N: usize>
+where
+    F: Frame<N, Sample = f64>,
+{
+    k_filter: KWeightFilter<F, N>,
+    momentary_gl: Option<GatedLoudness<F, N>>,
+    shortterm_gl: Option<GatedLoudness<F, N>>,
+    custom_gl_map: HashMap<Gating, GatedLoudness<F, N>>,
+}
+
+impl<F, const N: usize> PipelineLayer<F, N>
+where
+    F: Frame<N, Sample = f64>,
+{
+    pub fn is_noop(&self) -> bool {
+        self.momentary_gl.is_none() && self.shortterm_gl.is_none() && self.custom_gl_map.is_empty()
+    }
+
+    pub fn feed<I>(&mut self, frames: I)
+    where
+        I: IntoIterator<Item = F>,
+    {
+        for frame in frames.into_iter() {
+            self.push(frame);
+        }
+    }
+
+    pub fn push(&mut self, input: F) {
+        let filtered_frame = self.k_filter.process(input);
+
+        self.momentary_gl.as_mut().map(|gl| gl.push(filtered_frame));
+        self.shortterm_gl.as_mut().map(|gl| gl.push(filtered_frame));
+
+        for gated_loudness in self.custom_gl_map.values_mut() {
+            gated_loudness.push(filtered_frame);
+        }
+    }
+
+    pub fn calculate(self) -> Output {
+        Output {
+            momentary_mean: self.momentary_gl.and_then(|gl| gl.calculate()),
+            shortterm_mean: self.shortterm_gl.and_then(|gl| gl.calculate()),
+            custom_gating_means: self.custom_gl_map.into_iter()
+                .map(|(gating, gl)| {
+                    (gating, gl.calculate())
+                })
+                .collect(),
+        }
+    }
+}
+
+pub struct LayeredPipeline<F, const N: usize>
+where
+    F: Frame<N, Sample = f64>,
+{
+    pub sample_rate: u32,
+    pub g_weights: F,
+
+    // Flags for calculating preset/common gatings.
+    calc_momentary: bool,
+    calc_shortterm: bool,
+
+    // Custom gatings to calculate, usually will be empty.
+    custom_gatings: HashSet<Gating>,
+
+    // The stack of layers, starting with the root, and ending with the current child.
+    layers: Vec<PipelineLayer<F, N>>,
+}
+
 pub struct Pipeline<F, const N: usize>
 where
     F: Frame<N, Sample = f64>,
