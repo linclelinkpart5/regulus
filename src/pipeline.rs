@@ -150,7 +150,30 @@ where
         }
     }
 
-    pub fn push_layer(&mut self) {
+    pub fn push_frames<I>(&mut self, frames: I)
+    where
+        I: IntoIterator<Item = F>,
+    {
+        for frame in frames {
+            self.push_frame(frame);
+        }
+    }
+
+    pub fn process_track<I>(&mut self, frames: I) -> Output
+    where
+        I: IntoIterator<Item = F>,
+    {
+        let mut oneshot_layer = self.create_layer();
+
+        for frame in frames {
+            self.push_frame(frame);
+            oneshot_layer.push(frame);
+        }
+
+        oneshot_layer.calculate()
+    }
+
+    fn create_layer(&self) -> PipelineLayer<F, N> {
         let sample_rate = self.sample_rate;
         let g_weights = self.g_weights;
 
@@ -162,13 +185,16 @@ where
             .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
             .collect::<HashMap<_, _>>();
 
-        let new_layer = PipelineLayer {
+        PipelineLayer {
             k_filter,
             momentary_gl,
             shortterm_gl,
             custom_gl_map,
-        };
+        }
+    }
 
+    pub fn push_layer(&mut self) {
+        let new_layer = self.create_layer();
         self.layers.push(new_layer);
     }
 
