@@ -106,6 +106,22 @@ where
     }
 }
 
+impl<F, const N: usize> Calculator for PipelineLayer<F, N>
+where
+    F: Frame<N, Sample = f64>,
+{
+    type Input = F;
+    type Output = Output;
+
+    fn push(&mut self, input: Self::Input) {
+        self.push(input)
+    }
+
+    fn calculate(self) -> Self::Output {
+        self.calculate()
+    }
+}
+
 pub struct LayeredPipeline<F, const N: usize>
 where
     F: Frame<N, Sample = f64>,
