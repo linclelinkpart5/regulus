@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use sampara::{Frame, Calculator, Signal};
+use sampara::{Frame, Calculator};
 
 use crate::filter::KWeightFilter;
 use crate::gated_loudness::{Gating, GatedLoudness};
@@ -23,6 +23,25 @@ impl<F, const N: usize> PipelineLayer<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
+    fn new<I>(sample_rate: u32, g_weights: F, average_gatings: I, maxima_gatings: I) -> Self
+    where
+        I: IntoIterator<Item = Gating>,
+    {
+        let k_filter = KWeightFilter::new(sample_rate);
+        let gl_average_map = average_gatings.into_iter()
+            .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
+            .collect();
+        let gl_maxima_map = maxima_gatings.into_iter()
+            .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
+            .collect();
+
+        Self {
+            k_filter,
+            gl_average_map,
+            gl_maxima_map,
+        }
+    }
+
     pub fn is_noop(&self) -> bool {
         self.gl_average_map.is_empty() && self.gl_maxima_map.is_empty()
     }
@@ -185,5 +204,62 @@ where
 
     fn calculate(self) -> Self::Output {
         self.calculate()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PipelineBuilder<F, const N: usize>
+where
+    F: Frame<N, Sample = f64>,
+{
+    sample_rate: u32,
+    g_weights: F,
+    average_gatings: HashSet<Gating>,
+    maxima_gatings: HashSet<Gating>,
+}
+
+impl<F, const N: usize> PipelineBuilder<F, N>
+where
+    F: Frame<N, Sample = f64>,
+{
+    pub fn new(sample_rate: u32, g_weights: F) -> Self {
+        Self {
+            sample_rate,
+            g_weights,
+            average_gatings: HashSet::new(),
+            maxima_gatings: HashSet::new(),
+        }
+    }
+
+    #[inline]
+    pub fn average(&mut self, gating: Gating) -> &mut Self {
+        self.average_gatings.insert(gating);
+        self
+    }
+
+    #[inline]
+    pub fn maxima(&mut self, gating: Gating) -> &mut Self {
+        self.maxima_gatings.insert(gating);
+        self
+    }
+
+    pub fn build(&self) -> Pipeline<F, N> {
+        let Self { sample_rate, g_weights, average_gatings, maxima_gatings } = self.clone();
+
+        let root_layer = PipelineLayer::new(
+            sample_rate,
+            g_weights,
+            average_gatings.iter().copied(),
+            maxima_gatings.iter().copied(),
+        );
+
+        Pipeline {
+            sample_rate,
+            g_weights,
+            average_gatings,
+            maxima_gatings,
+            root_layer,
+            child_layers: Vec::new(),
+        }
     }
 }
