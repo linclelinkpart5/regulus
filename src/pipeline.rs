@@ -7,7 +7,7 @@ use crate::gated_loudness::{Gating, GatedLoudness};
 
 pub struct Output {
     averages: HashMap<Gating, Option<f64>>,
-    maximas: HashMap<Gating, Option<f64>>,
+    maximums: HashMap<Gating, Option<f64>>,
 }
 
 pub struct PipelineLayer<F, const N: usize>
@@ -16,14 +16,14 @@ where
 {
     k_filter: KWeightFilter<F, N>,
     gl_average_map: HashMap<Gating, GatedLoudness<F, N>>,
-    gl_maxima_map: HashMap<Gating, GatedLoudness<F, N>>,
+    gl_maximum_map: HashMap<Gating, GatedLoudness<F, N>>,
 }
 
 impl<F, const N: usize> PipelineLayer<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
-    fn new<I>(sample_rate: u32, g_weights: F, average_gatings: I, maxima_gatings: I) -> Self
+    fn new<I>(sample_rate: u32, g_weights: F, average_gatings: I, maximum_gatings: I) -> Self
     where
         I: IntoIterator<Item = Gating>,
     {
@@ -31,19 +31,19 @@ where
         let gl_average_map = average_gatings.into_iter()
             .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
-        let gl_maxima_map = maxima_gatings.into_iter()
+        let gl_maximum_map = maximum_gatings.into_iter()
             .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
 
         Self {
             k_filter,
             gl_average_map,
-            gl_maxima_map,
+            gl_maximum_map,
         }
     }
 
     pub fn is_noop(&self) -> bool {
-        self.gl_average_map.is_empty() && self.gl_maxima_map.is_empty()
+        self.gl_average_map.is_empty() && self.gl_maximum_map.is_empty()
     }
 
     pub fn feed<I>(&mut self, frames: I)
@@ -62,7 +62,7 @@ where
             gated_loudness.push(filtered_frame);
         }
 
-        for gated_loudness in self.gl_maxima_map.values_mut() {
+        for gated_loudness in self.gl_maximum_map.values_mut() {
             gated_loudness.push(filtered_frame);
         }
     }
@@ -74,7 +74,7 @@ where
             })
             .collect();
 
-        let maximas = self.gl_maxima_map.into_iter()
+        let maximums = self.gl_maximum_map.into_iter()
             .map(|(gating, gl)| {
                 (gating, gl.calculate())
             })
@@ -82,7 +82,7 @@ where
 
         Output {
             averages,
-            maximas,
+            maximums,
         }
     }
 }
@@ -110,9 +110,9 @@ where
     pub sample_rate: u32,
     pub g_weights: F,
 
-    // Gatings to calculate for both averages and maximas.
+    // Gatings to calculate for both averages and maximums.
     average_gatings: HashSet<Gating>,
-    maxima_gatings: HashSet<Gating>,
+    maximum_gatings: HashSet<Gating>,
 
     root_layer: PipelineLayer<F, N>,
 
@@ -164,7 +164,7 @@ where
             .iter()
             .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
             .collect::<HashMap<_, _>>();
-        let gl_maxima_map = self.maxima_gatings
+        let gl_maximum_map = self.maximum_gatings
             .iter()
             .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
             .collect::<HashMap<_, _>>();
@@ -172,7 +172,7 @@ where
         PipelineLayer {
             k_filter,
             gl_average_map,
-            gl_maxima_map,
+            gl_maximum_map,
         }
     }
 
@@ -215,7 +215,7 @@ where
     sample_rate: u32,
     g_weights: F,
     average_gatings: HashSet<Gating>,
-    maxima_gatings: HashSet<Gating>,
+    maximum_gatings: HashSet<Gating>,
 }
 
 impl<F, const N: usize> PipelineBuilder<F, N>
@@ -227,7 +227,7 @@ where
             sample_rate,
             g_weights,
             average_gatings: HashSet::new(),
-            maxima_gatings: HashSet::new(),
+            maximum_gatings: HashSet::new(),
         }
     }
 
@@ -238,26 +238,26 @@ where
     }
 
     #[inline]
-    pub fn maxima(&mut self, gating: Gating) -> &mut Self {
-        self.maxima_gatings.insert(gating);
+    pub fn maximum(&mut self, gating: Gating) -> &mut Self {
+        self.maximum_gatings.insert(gating);
         self
     }
 
     pub fn build(&self) -> Pipeline<F, N> {
-        let Self { sample_rate, g_weights, average_gatings, maxima_gatings } = self.clone();
+        let Self { sample_rate, g_weights, average_gatings, maximum_gatings } = self.clone();
 
         let root_layer = PipelineLayer::new(
             sample_rate,
             g_weights,
             average_gatings.iter().copied(),
-            maxima_gatings.iter().copied(),
+            maximum_gatings.iter().copied(),
         );
 
         Pipeline {
             sample_rate,
             g_weights,
             average_gatings,
-            maxima_gatings,
+            maximum_gatings,
             root_layer,
             child_layers: Vec::new(),
         }
