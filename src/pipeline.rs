@@ -136,26 +136,29 @@ where
     // Custom gatings to calculate, usually will be empty.
     custom_gatings: HashSet<Gating>,
 
-    // The stack of layers, starting with the root, and ending with the current child.
-    layers: Vec<PipelineLayer<F, N>>,
+    root_layer: PipelineLayer<F, N>,
+
+    // The stack of child layers, from closest to furthest from the root layer.
+    child_layers: Vec<PipelineLayer<F, N>>,
 }
 
 impl<F, const N: usize> LayeredPipeline<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
-    pub fn push_frame(&mut self, frame: F) {
-        for layer in self.layers.iter_mut() {
+    pub fn push(&mut self, frame: F) {
+        self.root_layer.push(frame);
+        for layer in self.child_layers.iter_mut() {
             layer.push(frame);
         }
     }
 
-    pub fn push_frames<I>(&mut self, frames: I)
+    pub fn feed<I>(&mut self, frames: I)
     where
         I: IntoIterator<Item = F>,
     {
         for frame in frames {
-            self.push_frame(frame);
+            self.push(frame);
         }
     }
 
@@ -166,7 +169,7 @@ where
         let mut oneshot_layer = self.create_layer();
 
         for frame in frames {
-            self.push_frame(frame);
+            self.push(frame);
             oneshot_layer.push(frame);
         }
 
@@ -193,13 +196,34 @@ where
         }
     }
 
-    pub fn push_layer(&mut self) {
+    pub fn add_layer(&mut self) {
         let new_layer = self.create_layer();
-        self.layers.push(new_layer);
+        self.child_layers.push(new_layer);
     }
 
-    pub fn pop_layer(&mut self) -> Option<Output> {
-        self.layers.pop().map(|l| l.calculate())
+    pub fn calculate(mut self) -> (Output, Option<Self>) {
+        if let Some(child_layer) = self.child_layers.pop() {
+            (child_layer.calculate(), Some(self))
+        }
+        else {
+            (self.root_layer.calculate(), None)
+        }
+    }
+}
+
+impl<F, const N: usize> Calculator for LayeredPipeline<F, N>
+where
+    F: Frame<N, Sample = f64>,
+{
+    type Input = F;
+    type Output = (Output, Option<Self>);
+
+    fn push(&mut self, input: Self::Input) {
+        self.push(input)
+    }
+
+    fn calculate(self) -> Self::Output {
+        self.calculate()
     }
 }
 
