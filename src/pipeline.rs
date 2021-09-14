@@ -6,8 +6,8 @@ use crate::filter::KWeightFilter;
 use crate::gated_loudness::{Gating, GatedLoudness};
 
 pub struct Output {
-    averages: HashMap<Gating, Option<f64>>,
-    maximums: HashMap<Gating, Option<f64>>,
+    pub averages: HashMap<Gating, Option<f64>>,
+    pub maximums: HashMap<Gating, Option<f64>>,
 }
 
 pub struct PipelineLayer<F, const N: usize>
@@ -23,16 +23,13 @@ impl<F, const N: usize> PipelineLayer<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
-    fn new<I>(sample_rate: u32, g_weights: F, average_gatings: I, maximum_gatings: I) -> Self
-    where
-        I: IntoIterator<Item = Gating>,
-    {
+    fn new(sample_rate: u32, g_weights: F, average_gatings: &HashSet<Gating>, maximum_gatings: &HashSet<Gating>) -> Self {
         let k_filter = KWeightFilter::new(sample_rate);
-        let gl_average_map = average_gatings.into_iter()
-            .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
+        let gl_average_map = average_gatings.iter()
+            .map(|&g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
-        let gl_maximum_map = maximum_gatings.into_iter()
-            .map(|g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
+        let gl_maximum_map = maximum_gatings.iter()
+            .map(|&g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
 
         Self {
@@ -114,10 +111,8 @@ where
     average_gatings: HashSet<Gating>,
     maximum_gatings: HashSet<Gating>,
 
-    root_layer: PipelineLayer<F, N>,
-
-    // The stack of child layers, from closest to furthest from the root layer.
-    child_layers: Vec<PipelineLayer<F, N>>,
+    // The stack of layers, starting with the root layer.
+    layers: Vec<PipelineLayer<F, N>>,
 }
 
 impl<F, const N: usize> Pipeline<F, N>
@@ -125,22 +120,31 @@ where
     F: Frame<N, Sample = f64>,
 {
     pub fn push(&mut self, frame: F) {
-        self.root_layer.push(frame);
-        for layer in self.child_layers.iter_mut() {
+        for layer in self.layers.iter_mut() {
             layer.push(frame);
         }
     }
 
-    pub fn feed<I>(&mut self, frames: I)
-    where
-        I: IntoIterator<Item = F>,
-    {
-        for frame in frames {
-            self.push(frame);
-        }
+    pub fn calculate(mut self) -> Option<(Output, Self)> {
+        self.layers.pop()
+            .map(|layer| (layer.calculate(), self))
     }
 
-    pub fn process_track<I>(&mut self, frames: I) -> Output
+    fn create_layer(&self) -> PipelineLayer<F, N> {
+        let sample_rate = self.sample_rate;
+        let g_weights = self.g_weights;
+        let average_gatings = &self.average_gatings;
+        let maximum_gatings = &self.maximum_gatings;
+
+        PipelineLayer::new(sample_rate, g_weights, average_gatings, maximum_gatings)
+    }
+
+    pub fn add_layer(&mut self) {
+        let new_layer = self.create_layer();
+        self.layers.push(new_layer);
+    }
+
+    pub fn process_sublayer<I>(&mut self, frames: I) -> Output
     where
         I: IntoIterator<Item = F>,
     {
@@ -153,42 +157,6 @@ where
 
         oneshot_layer.calculate()
     }
-
-    fn create_layer(&self) -> PipelineLayer<F, N> {
-        let sample_rate = self.sample_rate;
-        let g_weights = self.g_weights;
-
-        let k_filter = KWeightFilter::new(sample_rate);
-
-        let gl_average_map = self.average_gatings
-            .iter()
-            .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
-            .collect::<HashMap<_, _>>();
-        let gl_maximum_map = self.maximum_gatings
-            .iter()
-            .map(|g| (*g, GatedLoudness::new(sample_rate, g_weights, *g)))
-            .collect::<HashMap<_, _>>();
-
-        PipelineLayer {
-            k_filter,
-            gl_average_map,
-            gl_maximum_map,
-        }
-    }
-
-    pub fn add_layer(&mut self) {
-        let new_layer = self.create_layer();
-        self.child_layers.push(new_layer);
-    }
-
-    pub fn calculate(mut self) -> (Output, Option<Self>) {
-        if let Some(child_layer) = self.child_layers.pop() {
-            (child_layer.calculate(), Some(self))
-        }
-        else {
-            (self.root_layer.calculate(), None)
-        }
-    }
 }
 
 impl<F, const N: usize> Calculator for Pipeline<F, N>
@@ -196,7 +164,7 @@ where
     F: Frame<N, Sample = f64>,
 {
     type Input = F;
-    type Output = (Output, Option<Self>);
+    type Output = Option<(Output, Self)>;
 
     fn push(&mut self, input: Self::Input) {
         self.push(input)
@@ -243,23 +211,15 @@ where
         self
     }
 
-    pub fn build(&self) -> Pipeline<F, N> {
-        let Self { sample_rate, g_weights, average_gatings, maximum_gatings } = self.clone();
-
-        let root_layer = PipelineLayer::new(
-            sample_rate,
-            g_weights,
-            average_gatings.iter().copied(),
-            maximum_gatings.iter().copied(),
-        );
+    pub fn build(self) -> Pipeline<F, N> {
+        let Self { sample_rate, g_weights, average_gatings, maximum_gatings } = self;
 
         Pipeline {
             sample_rate,
             g_weights,
             average_gatings,
             maximum_gatings,
-            root_layer,
-            child_layers: Vec::new(),
+            layers: Vec::new(),
         }
     }
 }
