@@ -15,32 +15,33 @@ where
     F: Frame<N, Sample = f64>,
 {
     k_filter: KWeightFilter<F, N>,
-    gl_average_map: HashMap<Gating, GatedLoudness<F, N>>,
-    gl_maximum_map: HashMap<Gating, GatedLoudness<F, N>>,
+    avg_gl_map: HashMap<Gating, GatedLoudness<F, N>>,
+    max_gl_map: HashMap<Gating, GatedLoudness<F, N>>,
 }
 
 impl<F, const N: usize> PipelineLayer<F, N>
 where
     F: Frame<N, Sample = f64>,
 {
-    fn new(sample_rate: u32, g_weights: F, average_gatings: &HashSet<Gating>, maximum_gatings: &HashSet<Gating>) -> Self {
+    fn new(sample_rate: u32, g_weights: F, avg_gatings: &HashSet<Gating>, max_gatings: &HashSet<Gating>) -> Self {
         let k_filter = KWeightFilter::new(sample_rate);
-        let gl_average_map = average_gatings.iter()
+
+        let avg_gl_map = avg_gatings.iter()
             .map(|&g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
-        let gl_maximum_map = maximum_gatings.iter()
+        let max_gl_map = max_gatings.iter()
             .map(|&g| (g, GatedLoudness::new(sample_rate, g_weights, g)))
             .collect();
 
         Self {
             k_filter,
-            gl_average_map,
-            gl_maximum_map,
+            avg_gl_map,
+            max_gl_map,
         }
     }
 
     pub fn is_noop(&self) -> bool {
-        self.gl_average_map.is_empty() && self.gl_maximum_map.is_empty()
+        self.avg_gl_map.is_empty() && self.max_gl_map.is_empty()
     }
 
     pub fn feed<I>(&mut self, frames: I)
@@ -55,23 +56,23 @@ where
     pub fn push(&mut self, input: F) {
         let filtered_frame = self.k_filter.process(input);
 
-        for gated_loudness in self.gl_average_map.values_mut() {
+        for gated_loudness in self.avg_gl_map.values_mut() {
             gated_loudness.push(filtered_frame);
         }
 
-        for gated_loudness in self.gl_maximum_map.values_mut() {
+        for gated_loudness in self.max_gl_map.values_mut() {
             gated_loudness.push(filtered_frame);
         }
     }
 
     pub fn calculate(self) -> Output {
-        let averages = self.gl_average_map.into_iter()
+        let averages = self.avg_gl_map.into_iter()
             .map(|(gating, gl)| {
                 (gating, gl.calculate())
             })
             .collect();
 
-        let maximums = self.gl_maximum_map.into_iter()
+        let maximums = self.max_gl_map.into_iter()
             .map(|(gating, gl)| {
                 (gating, gl.calculate())
             })
@@ -108,8 +109,8 @@ where
     pub g_weights: F,
 
     // Gatings to calculate for both averages and maximums.
-    average_gatings: HashSet<Gating>,
-    maximum_gatings: HashSet<Gating>,
+    avg_gatings: HashSet<Gating>,
+    max_gatings: HashSet<Gating>,
 
     // The stack of layers, starting with the root layer.
     layers: Vec<PipelineLayer<F, N>>,
@@ -131,20 +132,21 @@ where
     }
 
     fn create_layer(&self) -> PipelineLayer<F, N> {
-        let sample_rate = self.sample_rate;
-        let g_weights = self.g_weights;
-        let average_gatings = &self.average_gatings;
-        let maximum_gatings = &self.maximum_gatings;
+        let Self { sample_rate, g_weights, avg_gatings, max_gatings, .. } = self;
 
-        PipelineLayer::new(sample_rate, g_weights, average_gatings, maximum_gatings)
+        PipelineLayer::new(*sample_rate, *g_weights, avg_gatings, max_gatings)
     }
 
-    pub fn add_layer(&mut self) {
+    pub fn push_layer(&mut self) {
         let new_layer = self.create_layer();
         self.layers.push(new_layer);
     }
 
-    pub fn process_sublayer<I>(&mut self, frames: I) -> Output
+    pub fn pop_layer(&mut self) -> Option<Output> {
+        self.layers.pop().map(|l| l.calculate())
+    }
+
+    pub fn oneshot_sublayer<I>(&mut self, frames: I) -> Output
     where
         I: IntoIterator<Item = F>,
     {
@@ -182,8 +184,9 @@ where
 {
     sample_rate: u32,
     g_weights: F,
-    average_gatings: HashSet<Gating>,
-    maximum_gatings: HashSet<Gating>,
+    avg_gatings: HashSet<Gating>,
+    max_gatings: HashSet<Gating>,
+    num_layers: usize,
 }
 
 impl<F, const N: usize> PipelineBuilder<F, N>
@@ -194,32 +197,44 @@ where
         Self {
             sample_rate,
             g_weights,
-            average_gatings: HashSet::new(),
-            maximum_gatings: HashSet::new(),
+            avg_gatings: HashSet::new(),
+            max_gatings: HashSet::new(),
+            num_layers: 0,
         }
     }
 
     #[inline]
     pub fn average(&mut self, gating: Gating) -> &mut Self {
-        self.average_gatings.insert(gating);
+        self.avg_gatings.insert(gating);
         self
     }
 
     #[inline]
     pub fn maximum(&mut self, gating: Gating) -> &mut Self {
-        self.maximum_gatings.insert(gating);
+        self.max_gatings.insert(gating);
+        self
+    }
+
+    #[inline]
+    pub fn num_layers(&mut self, n: usize) -> &mut Self {
+        self.num_layers = n;
         self
     }
 
     pub fn build(self) -> Pipeline<F, N> {
-        let Self { sample_rate, g_weights, average_gatings, maximum_gatings } = self;
+        let Self { sample_rate, g_weights, avg_gatings, max_gatings, num_layers } = self;
+
+        let mut layers = Vec::new();
+        layers.resize_with(num_layers, || {
+            PipelineLayer::new(sample_rate, g_weights, &avg_gatings, &max_gatings)
+        });
 
         Pipeline {
             sample_rate,
             g_weights,
-            average_gatings,
-            maximum_gatings,
-            layers: Vec::new(),
+            avg_gatings,
+            max_gatings,
+            layers,
         }
     }
 }
