@@ -5,6 +5,7 @@ use sampara::{Frame, Calculator};
 use crate::filter::KWeightFilter;
 use crate::gated_loudness::{Gating, GatedLoudness};
 
+#[derive(Debug, Clone)]
 pub struct Output {
     pub averages: HashMap<Gating, Option<f64>>,
     pub maximums: HashMap<Gating, Option<f64>>,

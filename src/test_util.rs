@@ -413,8 +413,8 @@ impl TestUtil {
         let mut track_analyses = Vec::with_capacity(track_bundles.len());
 
         // Keep track of the sample rate across tracks.
-        // TODO: Should support be added for albums with tracks with different
-        //       sample rates?
+        // TODO: Can/should support be added for albums with tracks with
+        //       different sample rates?
         let mut expected_sample_rate = None;
 
         for (track_path, load_func) in track_bundles {
