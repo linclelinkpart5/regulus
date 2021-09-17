@@ -60,6 +60,10 @@ where
         }
     }
 
+    pub fn reset(&mut self) {
+        self.ms_state.reset();
+    }
+
     pub fn momentary(sample_rate: u32) -> Self {
         Self::new(sample_rate, Gating::Momentary)
     }

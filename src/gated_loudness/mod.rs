@@ -28,6 +28,11 @@ where
         }
     }
 
+    pub fn reset(&mut self) {
+        self.gated_powers.reset();
+        self.loudness.reset();
+    }
+
     pub fn momentary(sample_rate: u32, g_weights: F) -> Self {
         Self::new(sample_rate, g_weights, Gating::Momentary)
     }

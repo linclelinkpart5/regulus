@@ -41,6 +41,18 @@ where
         }
     }
 
+    pub fn reset(&mut self) {
+        self.k_filter.reset();
+
+        for avg_gl in self.avg_gl_map.values_mut() {
+            avg_gl.reset();
+        }
+
+        for max_gl in self.max_gl_map.values_mut() {
+            max_gl.reset();
+        }
+    }
+
     pub fn is_noop(&self) -> bool {
         self.avg_gl_map.is_empty() && self.max_gl_map.is_empty()
     }

@@ -66,6 +66,11 @@ where
         Self { bq_shelving, bq_highpass }
     }
 
+    pub fn reset(&mut self) {
+        self.bq_shelving.reset();
+        self.bq_highpass.reset();
+    }
+
     pub fn process(&mut self, input: F) -> F {
         Processor::process(self, input)
     }
